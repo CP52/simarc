@@ -451,14 +451,14 @@ if st.button("Calcola"):
 
     # Grafico parallasse: riser/occhio/bersaglio
     fig_fpv = plot_parallax_fpv(
-    target_distance=target_distance,
-    target_height=target_height,
-    riser_height=0.43,
-    riser_width=0.03,
-    window_height=0.12,
-    window_offset=0.05,
-    anchor_length=anchor_length,
-    launch_height=quota_finale,
-    eye_offset_v=eye_offset_v
-)
-st.pyplot(fig_fpv)
+        target_distance=target_distance,
+        target_height=target_height,
+        riser_height=0.43,
+        riser_width=0.03,
+        window_height=0.12,
+        window_offset=0.05,
+        anchor_length=anchor_length,
+        launch_height=quota_finale,
+        eye_offset_v=eye_offset_v
+    )
+    st.pyplot(fig_fpv)
