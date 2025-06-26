@@ -267,6 +267,74 @@ def plot_parallax_scenario(
     ax.grid(True, linestyle=':')
     plt.tight_layout()
     return fig
+    
+def plot_parallax_fpv(
+    target_distance=40.0, target_height=1.5,
+    riser_height=0.43, riser_width=0.03, window_height=0.12, window_offset=0.05,
+    anchor_length=0.75, launch_height=1.5, eye_offset_v=0.09
+):
+    # Tutte le quote sono relative all'occhio
+    # Mettiamo l'occhio in (0,0), la finestra/freccia davanti, il bersaglio lontano.
+    x_eye = 0
+    y_eye = 0
+
+    # Coordinate riser rispetto all'occhio
+    x_riser = anchor_length  # distanza orizzontale riser-occhio
+    y_riser_base = launch_height - (launch_height + eye_offset_v)
+    y_riser_top = y_riser_base + riser_height
+
+    # Finestra arco centrata
+    y_window_bottom = y_riser_base + (riser_height - window_height) / 2
+    y_window_top = y_window_bottom + window_height
+
+    # Punto di mira apparente (dove la retta occhio-bersaglio taglia il riser)
+    m = (target_height - (launch_height + eye_offset_v)) / (target_distance + anchor_length)
+    y_mira = m * x_riser
+    delta_mm = (y_mira - (launch_height - (launch_height + eye_offset_v))) * 1000
+
+    # Il bersaglio è visto come un cerchio, centrato in
+    y_bersaglio_apparente = m * (target_distance + anchor_length)
+
+    fig, ax = plt.subplots(figsize=(3, 5))
+
+    # Riser (visto frontalmente)
+    ax.add_patch(plt.Rectangle(
+        (x_riser - riser_width/2, y_riser_base),
+        riser_width, riser_height, color="gray", alpha=0.5, label="Riser"
+    ))
+    # Finestra arco (incavo sulla destra)
+    ax.add_patch(plt.Rectangle(
+        (x_riser, y_window_bottom),
+        window_offset, window_height, color="white", alpha=1, zorder=5
+    ))
+
+    # Freccia (verde), sempre al centro della finestra
+    ax.plot(x_riser, (y_riser_base + y_riser_top)/2, 'go', ms=10, label="Freccia (uscita)")
+
+    # Punto di mira apparente (dove vedi il bersaglio sul riser)
+    ax.plot(x_riser, y_mira, 'ro', ms=12, label="Punto di mira")
+
+    # Bersaglio (proiettato in lontananza, ma rappresentato sulla retta visuale)
+    ax.plot(x_riser + 0.35, y_mira, 'bo', ms=40, alpha=0.13)  # alone "sfocato" del bersaglio
+    ax.plot(x_riser + 0.35, y_mira, 'yo', ms=16, label="Bersaglio (proiezione)")
+
+    # Annotazione
+    ax.annotate(
+        f"{delta_mm:+.1f} mm rispetto freccia",
+        xy=(x_riser, y_mira), xytext=(x_riser + 0.15, y_mira + 0.04),
+        arrowprops=dict(arrowstyle="->", color='red'),
+        fontsize=10, color='red'
+    )
+
+    ax.set_xlim(x_riser - 0.05, x_riser + 0.4)
+    ax.set_ylim(y_riser_base - 0.08, y_riser_top + 0.08)
+    ax.set_xlabel("Distanza visuale (m)")
+    ax.set_ylabel("Quota relativa all'occhio (m)")
+    ax.set_title("Vista soggettiva arciere: punto di mira apparente sul riser")
+    ax.legend()
+    ax.axis('off')
+    plt.tight_layout()
+    return fig
 
 # --- INTERFACCIA STREAMLIT ---
 
@@ -382,15 +450,15 @@ if st.button("Calcola"):
     )
 
     # Grafico parallasse: riser/occhio/bersaglio
-    fig_parallax = plot_parallax_scenario(
-        target_distance=target_distance,
-        target_height=target_height,
-        riser_height=0.43,
-        riser_width=0.03,
-        window_height=0.12,
-        window_offset=0.05,
-        anchor_length=anchor_length,
-        launch_height=quota_finale,
-        eye_offset_v=eye_offset_v
-    )
-    st.pyplot(fig_parallax)
+    fig_fpv = plot_parallax_fpv(
+    target_distance=target_distance,
+    target_height=target_height,
+    riser_height=0.43,
+    riser_width=0.03,
+    window_height=0.12,
+    window_offset=0.05,
+    anchor_length=anchor_length,
+    launch_height=quota_finale,
+    eye_offset_v=eye_offset_v
+)
+st.pyplot(fig_fpv)
