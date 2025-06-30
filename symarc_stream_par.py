@@ -273,68 +273,92 @@ def plot_parallax_fpv(
     riser_height=0.43, riser_width=0.03, window_height=0.12, window_offset=0.05,
     anchor_length=0.75, launch_height=1.5, eye_offset_v=0.09
 ):
-    # Tutte le quote sono relative all'occhio
-    # Mettiamo l'occhio in (0,0), la finestra/freccia davanti, il bersaglio lontano.
-    x_eye = 0
-    y_eye = 0
+    # Sistema di riferimento: occhio in (0,0)
+    D = target_distance
+    d = anchor_length
+    y_eye = launch_height + eye_offset_v
+    y_target_rel = target_height - y_eye
 
-    # Coordinate riser rispetto all'occhio
-    x_riser = anchor_length  # distanza orizzontale riser-occhio
-    y_riser_base = launch_height - (launch_height + eye_offset_v)
-    y_riser_top = y_riser_base + riser_height
+    # Riser davanti all'occhio (a destra)
+    x_riser = d
+    y_riser_base = -eye_offset_v - riser_height/2
+    y_riser_top = -eye_offset_v + riser_height/2
 
-    # Finestra arco centrata
-    y_window_bottom = y_riser_base + (riser_height - window_height) / 2
-    y_window_top = y_window_bottom + window_height
+    # Finestra (sul lato destro del riser, per arciere destrimano)
+    x_window_left = x_riser + riser_width/2 - window_offset
+    x_window_right = x_riser + riser_width/2
+    y_window_bottom = -eye_offset_v - window_height/2
+    y_window_top = -eye_offset_v + window_height/2
 
-    # Punto di mira apparente (dove la retta occhio-bersaglio taglia il riser)
-    m = (target_height - (launch_height + eye_offset_v)) / (target_distance + anchor_length)
-    y_mira = m * x_riser
-    delta_mm = (y_mira - (launch_height - (launch_height + eye_offset_v))) * 1000
+    # Freccia: cocca nell'angolo in basso a destra della finestra
+    x_arrow = x_window_right - 0.004  # piccolo margine per vedere il verde
+    y_arrow = y_window_bottom + 0.005
 
-    # Il bersaglio è visto come un cerchio, centrato in
-    y_bersaglio_apparente = m * (target_distance + anchor_length)
+    # Punto di mira apparente (intersezione retta visuale col riser)
+    m = y_target_rel / (D + d)
+    y_mira = m * d
+    delta_mm = (y_mira - (-eye_offset_v)) * 1000
 
-    fig, ax = plt.subplots(figsize=(3, 5))
+    # Bersaglio - dimensione apparente e posizione
+    bersaglio_diametro_reale = 1.22  # metri
+    x_bersaglio = x_riser + 0.2      # sempre centrato dietro il riser
+    y_bersaglio = y_mira
 
-    # Riser (visto frontalmente)
+    # Dimensione apparente (diametro angolare -> diametro a questa distanza nel disegno)
+    diametro_apparente_rad = bersaglio_diametro_reale / (D)
+    # Scala: proiettiamo la "dimensione" a una distanza fissa dietro il riser (es. 0.2 m)
+    scale = 0.2 / D
+    bersaglio_draw_diam = bersaglio_diametro_reale * scale
+
+    fig, ax = plt.subplots(figsize=(4, 6))
+
+    # Riser (rettangolo verticale)
     ax.add_patch(plt.Rectangle(
         (x_riser - riser_width/2, y_riser_base),
-        riser_width, riser_height, color="gray", alpha=0.5, label="Riser"
+        riser_width, riser_height, color="gray", alpha=0.7, label="Riser"
     ))
-    # Finestra arco (incavo sulla destra)
+
+    # Finestra (sul lato destro)
     ax.add_patch(plt.Rectangle(
-        (x_riser, y_window_bottom),
+        (x_window_left, y_window_bottom),
         window_offset, window_height, color="white", alpha=1, zorder=5
     ))
 
-    # Freccia (verde), sempre al centro della finestra
-    ax.plot(x_riser, (y_riser_base + y_riser_top)/2, 'go', ms=10, label="Freccia (uscita)")
+    # Freccia: cocca verde, angolo in basso a destra della finestra
+    ax.plot(x_arrow, y_arrow, 'go', ms=13, label="Freccia (cocca)")
 
-    # Punto di mira apparente (dove vedi il bersaglio sul riser)
-    ax.plot(x_riser, y_mira, 'ro', ms=12, label="Punto di mira")
+    # Punto di mira apparente (rosso, dove il bersaglio cade sul riser)
+    ax.plot(x_riser, y_mira, 'ro', ms=13, label="Punto di mira apparente")
 
-    # Bersaglio (proiettato in lontananza, ma rappresentato sulla retta visuale)
-    ax.plot(x_riser + 0.35, y_mira, 'bo', ms=40, alpha=0.13)  # alone "sfocato" del bersaglio
-    ax.plot(x_riser + 0.35, y_mira, 'yo', ms=16, label="Bersaglio (proiezione)")
+    # Bersaglio olimpico (10 cerchi concentrici, colori regolamentari semplificati)
+    bersaglio_color = ['#FFF', '#000', '#00F', '#F00', '#FFD700']  # bianco, nero, blu, rosso, oro
+    rings_cm = [122, 100, 80, 60, 40, 20, 12.2]  # diametri anelli principali (cm)
+    rings = [r/100 * scale for r in rings_cm]    # scala e conversione metri
 
-    # Annotazione
+    for i, (radius, col) in enumerate(zip(reversed(rings), reversed(bersaglio_color*2))):
+        ring = plt.Circle((x_bersaglio, y_bersaglio), radius/2, fill=True, color=col, alpha=0.33, zorder=1)
+        ax.add_patch(ring)
+
+    # Legenda in alto a destra
+    ax.legend(loc='upper right', fontsize=9)
+
+    # Annotazione delta
     ax.annotate(
         f"{delta_mm:+.1f} mm rispetto freccia",
-        xy=(x_riser, y_mira), xytext=(x_riser + 0.15, y_mira + 0.04),
+        xy=(x_riser, y_mira), xytext=(x_riser + 0.07, y_mira + 0.09),
         arrowprops=dict(arrowstyle="->", color='red'),
         fontsize=10, color='red'
     )
 
-    ax.set_xlim(x_riser - 0.05, x_riser + 0.4)
-    ax.set_ylim(y_riser_base - 0.08, y_riser_top + 0.08)
-    ax.set_xlabel("Distanza visuale (m)")
+    ax.set_xlim(x_riser - 0.04, x_riser + 0.28)
+    ax.set_ylim(y_riser_base - 0.08, y_riser_top + 0.18)
+    ax.set_xlabel("Vista soggettiva (orizzontale)")
     ax.set_ylabel("Quota relativa all'occhio (m)")
-    ax.set_title("Vista soggettiva arciere: punto di mira apparente sul riser")
-    ax.legend()
+    ax.set_title("Vista soggettiva: punto di mira apparente su riser", fontsize=12)
     ax.axis('off')
     plt.tight_layout()
     return fig
+
 
 # --- INTERFACCIA STREAMLIT ---
 
