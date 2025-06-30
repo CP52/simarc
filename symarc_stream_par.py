@@ -270,44 +270,43 @@ def plot_parallax_scenario(
     
 def plot_parallax_fpv(
     target_distance=40.0, target_height=1.5,
-    riser_height=0.43, riser_width=0.03, window_height=0.12, window_offset=0.05,
+    riser_height=0.43, riser_width=0.05, window_height=0.12, window_width=0.025, window_offset=0.0125,
     anchor_length=0.75, launch_height=1.5, eye_offset_v=0.09
 ):
-    # Sistema di riferimento: occhio in (0,0)
+    # Occhio in (0,0)
     D = target_distance
     d = anchor_length
     y_eye = launch_height + eye_offset_v
     y_target_rel = target_height - y_eye
 
-    # Riser davanti all'occhio (a destra)
+    # RISER: centrato a x = d, da y = -eye_offset_v - h/2 a y = -eye_offset_v + h/2
     x_riser = d
     y_riser_base = -eye_offset_v - riser_height/2
     y_riser_top = -eye_offset_v + riser_height/2
 
-    # Finestra (sul lato destro del riser, per arciere destrimano)
-    x_window_left = x_riser + riser_width/2 - window_offset
-    x_window_right = x_riser + riser_width/2
+    # FINESTRA: rientra verso SINISTRA, larga 0.025m, alta 0.12m, centrata verticalmente
+    x_window_right = x_riser - riser_width/2 + window_offset  # bordo sinistro finestra
+    x_window_left = x_window_right - window_width             # bordo rientro finestra
     y_window_bottom = -eye_offset_v - window_height/2
     y_window_top = -eye_offset_v + window_height/2
 
-    # Freccia: cocca nell'angolo in basso a destra della finestra
-    x_arrow = x_window_right - 0.004  # piccolo margine per vedere il verde
-    y_arrow = y_window_bottom + 0.005
+    # COCCA: angolo in basso a sinistra della finestra
+    x_arrow = x_window_left + 0.004  # leggermente dentro la finestra
+    y_arrow = y_window_bottom + 0.004
 
-    # Punto di mira apparente (intersezione retta visuale col riser)
+    # PUNTO DI MIRA (proiezione retta visuale occhio-bersaglio sul riser)
     m = y_target_rel / (D + d)
     y_mira = m * d
-    delta_mm = (y_mira - (-eye_offset_v)) * 1000
 
-    # Bersaglio - dimensione apparente e posizione
-    bersaglio_diametro_reale = 1.22  # metri
-    x_bersaglio = x_riser + 0.2      # sempre centrato dietro il riser
+    delta_mm = (y_mira - y_arrow) * 1000  # quota rispetto alla cocca
+
+    # BERSAGLIO olimpico: sempre centrato sulla mezzeria riser
+    x_bersaglio = x_riser
     y_bersaglio = y_mira
 
-    # Dimensione apparente (diametro angolare -> diametro a questa distanza nel disegno)
-    diametro_apparente_rad = bersaglio_diametro_reale / (D)
-    # Scala: proiettiamo la "dimensione" a una distanza fissa dietro il riser (es. 0.2 m)
-    scale = 0.2 / D
+    # DIAMETRO apparente bersaglio
+    bersaglio_diametro_reale = 1.22  # metri
+    scale = 0.23 / D  # posizione virtuale 23cm dietro riser
     bersaglio_draw_diam = bersaglio_diametro_reale * scale
 
     fig, ax = plt.subplots(figsize=(4, 6))
@@ -315,28 +314,28 @@ def plot_parallax_fpv(
     # Riser (rettangolo verticale)
     ax.add_patch(plt.Rectangle(
         (x_riser - riser_width/2, y_riser_base),
-        riser_width, riser_height, color="gray", alpha=0.7, label="Riser"
+        riser_width, riser_height, color="gray", alpha=0.8, label="Riser"
     ))
 
-    # Finestra (sul lato destro)
+    # Finestra (rientro SINISTRO)
     ax.add_patch(plt.Rectangle(
         (x_window_left, y_window_bottom),
-        window_offset, window_height, color="white", alpha=1, zorder=5
+        window_width, window_height, color="white", alpha=1, zorder=5, label="Finestra"
     ))
 
-    # Freccia: cocca verde, angolo in basso a destra della finestra
-    ax.plot(x_arrow, y_arrow, 'go', ms=13, label="Freccia (cocca)")
+    # Freccia (cocca verde)
+    ax.plot(x_arrow, y_arrow, 'go', ms=13, label="Cocca freccia")
 
-    # Punto di mira apparente (rosso, dove il bersaglio cade sul riser)
-    ax.plot(x_riser, y_mira, 'ro', ms=13, label="Punto di mira apparente")
+    # Punto di mira apparente (rosso)
+    ax.plot(x_riser - riser_width/2, y_mira, 'ro', ms=12, label="Punto di mira")
 
-    # Bersaglio olimpico (10 cerchi concentrici, colori regolamentari semplificati)
-    bersaglio_color = ['#FFF', '#000', '#00F', '#F00', '#FFD700']  # bianco, nero, blu, rosso, oro
-    rings_cm = [122, 100, 80, 60, 40, 20, 12.2]  # diametri anelli principali (cm)
-    rings = [r/100 * scale for r in rings_cm]    # scala e conversione metri
-
-    for i, (radius, col) in enumerate(zip(reversed(rings), reversed(bersaglio_color*2))):
-        ring = plt.Circle((x_bersaglio, y_bersaglio), radius/2, fill=True, color=col, alpha=0.33, zorder=1)
+    # Bersaglio olimpico (10 cerchi concentrici)
+    # Colori: oro, rosso, blu, nero, bianco
+    bersaglio_colors = ["#FFD700", "#FFD700", "#FF0000", "#FF0000", "#0000FF", "#0000FF", "#000", "#000", "#FFF", "#FFF"]
+    rings_cm = [12.2, 24.4, 36.6, 48.8, 61.0, 73.2, 85.4, 97.6, 109.8, 122.0]  # diametri in cm
+    for diam_cm, color in zip(rings_cm[::-1], bersaglio_colors[::-1]):
+        diam = (diam_cm/100) * scale
+        ring = plt.Circle((x_bersaglio, y_bersaglio), diam/2, color=color, alpha=0.45, zorder=0, ec="k")
         ax.add_patch(ring)
 
     # Legenda in alto a destra
@@ -344,17 +343,17 @@ def plot_parallax_fpv(
 
     # Annotazione delta
     ax.annotate(
-        f"{delta_mm:+.1f} mm rispetto freccia",
-        xy=(x_riser, y_mira), xytext=(x_riser + 0.07, y_mira + 0.09),
+        f"{delta_mm:+.1f} mm sopra la cocca",
+        xy=(x_riser - riser_width/2, y_mira), xytext=(x_riser - riser_width/2 + 0.03, y_mira + 0.04),
         arrowprops=dict(arrowstyle="->", color='red'),
         fontsize=10, color='red'
     )
 
-    ax.set_xlim(x_riser - 0.04, x_riser + 0.28)
-    ax.set_ylim(y_riser_base - 0.08, y_riser_top + 0.18)
+    ax.set_xlim(x_riser - riser_width/2 - 0.03, x_riser + riser_width/2 + 0.08)
+    ax.set_ylim(y_riser_base - 0.06, y_riser_top + 0.17)
     ax.set_xlabel("Vista soggettiva (orizzontale)")
     ax.set_ylabel("Quota relativa all'occhio (m)")
-    ax.set_title("Vista soggettiva: punto di mira apparente su riser", fontsize=12)
+    ax.set_title("Vista soggettiva: punto di mira apparente sul riser", fontsize=12)
     ax.axis('off')
     plt.tight_layout()
     return fig
