@@ -8,7 +8,7 @@ st.set_page_config(page_title="Simulatore linea di mira", layout="centered")
 st.title("Proiezione sul riser della linea di mira")
 
 # Illustrazione
-st.image("mira.png", caption="Schema concettuale: occhio, cocca, punta e proiezione sul riser", use_column_width=True)
+st.image("mira.png", caption="Schema concettuale: occhio, cocca, punta e proiezione sul riser", use_container_width=True)
 
 # Parametri
 o = st.number_input("Distanza occhio–cocca (m)", min_value=0.01, max_value=1.0, value=0.11, step=0.01)
@@ -40,5 +40,6 @@ y_table = y_cm(x_table, o, t)
 df = pd.DataFrame({"Distanza (m)": x_table, "Proiezione sul riser (cm)": y_table})
 st.subheader("Tabella valori")
 st.dataframe(df, use_container_width=True)
+
 
 
