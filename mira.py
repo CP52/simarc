@@ -36,18 +36,18 @@ ymax = max(np.max(y_vals_laser), y_drop_point) * 1.05
 # Grafico
 fig, ax = plt.subplots(figsize=(8, 5))
 ax.plot(x_vals, y_vals_laser, label="Proiezione laser (d=0)", color="blue")
-ax.scatter([x_drop], [y_drop_point], color="red", s=60, label="Punto con drop")
+ax.scatter([x_drop], [y_drop_point], color="red", s=60, label="Proiezione impatto con drop")
 ax.set_xlim(0, 50)
 ax.set_ylim(ymin, ymax)
 ax.set_xlabel("Distanza bersaglio (m)")
 ax.set_ylabel("Proiezione sul riser (cm)")
-ax.set_title("Curva della proiezione sul riser della linea di mira")
+ax.set_title("Curva della proiezione sul riser della linea di mira-tiro teso")
 ax.grid(True, linestyle="--", alpha=0.6)
 ax.legend()
 st.pyplot(fig)
 
 # Testo con Y calcolata al drop
-st.subheader("Proiezione al punto di drop")
+st.subheader("Proiezione del punto di impatto con drop")
 st.write(f"A distanza **{x_drop:.1f} m**, con drop = {d:.2f} m → proiezione sul riser = **{y_drop_point:.2f} cm**")
 
 # Tabella valori per la curva laser (d=0), da 0 a 50 m passo 5
@@ -60,4 +60,5 @@ df.index = [''] * len(df)
 
 st.subheader("Tabella valori (tiro teso, d=0)")
 st.dataframe(df, use_container_width=True)
+
 
