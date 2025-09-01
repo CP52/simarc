@@ -12,15 +12,16 @@ st.image("mira.png", caption="Schema: occhio, cocca, riser e proiezione sul rise
 
 # Parametri
 o = st.number_input("Distanza occhio–cocca o-c (m)", min_value=0.01, max_value=1.0, value=0.11, step=0.01)
-t = st.number_input("Distanza cocca–riser (m)", min_value=0.01, max_value=2.0, value=0.70, step=0.01)
-d = st.number_input("Drop (m)", min_value=0.0, max_value=10.0, value=0.0, step=0.01)
+t = st.number_input("Distanza cocca–riser c-r (m)", min_value=0.01, max_value=2.0, value=0.70, step=0.01)
+d = st.number_input("Drop (m)", min_value=0.0, max_value=10.0, value=0.0, step=0.1)
 x_drop = st.number_input("Distanza bersaglio (m)", min_value=0.0, max_value=50.0, value=20.0, step=1.0)
 
 # Funzione y(x) in cm
 def y_cm(x, o, t, d=0.0):
     u = (o + d) / (t + x)
-    return 100 * x * (u / np.sqrt(1 + u**2))
-
+    y_calc = 100 * x * (u / np.sqrt(1 + u**2))
+    return y_calc - d*100   # sottraggo il drop espresso in cm
+    
 # Curva laser (d=0)
 x_vals = np.linspace(0, 50, 1000)
 y_vals_laser = y_cm(x_vals, o, t, 0.0)
@@ -59,3 +60,4 @@ df.index = [''] * len(df)
 
 st.subheader("Tabella valori (tiro teso, d=0)")
 st.dataframe(df, use_container_width=True)
+
