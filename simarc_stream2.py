@@ -123,16 +123,75 @@ def trova_angolo_convergenza(params, tol_angle=0.01, tol_height=0.001, max_iter=
         angolo, quota_uscita = angolo_nuovo, y_launch_new
     return angolo, quota_uscita
 
+def plot_trajectory(X1, Y1, X2=None, Y2=None, params=None, angle=None, v0=None, tflight=None, show_mira=False):
+    fig, ax = plt.subplots()
+    ax.plot(X1, Y1, label="Con drag (realistico)")
+
+    if X2 is not None and Y2 is not None:
+        ax.plot(X2, Y2, label="Senza drag", linestyle='--')
+        y1_at_target = get_y_at_x(X1, Y1, params['target_distance'])
+        y2_at_target = get_y_at_x(X2, Y2, params['target_distance'])
+        delta_cm = abs(y1_at_target - y2_at_target) * 100
+        ax.annotate(
+            f"Δ: {delta_cm:.1f} cm",
+            xy=(params['target_distance'], y1_at_target),
+            xytext=(params['target_distance'] - 8, max(y1_at_target, y2_at_target) + 0.5),
+            arrowprops=dict(arrowstyle="->"),
+            bbox=dict(boxstyle="round,pad=0.3", fc="w", ec="gray", alpha=0.8)
+        )
+
+    ax.plot(params['target_distance'], params['target_height'], 'go', label="Bersaglio")
+
+    dx = params['target_distance']
+    dy = params['target_height'] - params['launch_height']
+    mira_angle = np.degrees(np.arctan2(dy, dx))
+    rel_angle = angle - mira_angle
+
+    y0 = params['launch_height']
+    theta_rad = np.radians(angle)
+    if show_mira:
+        x_mira = np.array([0, params['target_distance']])
+        y_mira = y0 + np.tan(theta_rad) * x_mira
+        ax.plot(x_mira, y_mira, 'k--', label="Linea di mira")
+
+    y_freccia = get_y_at_x(X1, Y1, params['target_distance'])
+    y_mira_finale = y0 + np.tan(theta_rad) * params['target_distance']
+    drop_cm = (y_mira_finale - y_freccia) * 100
+    ax.annotate(
+        f"Drop: {drop_cm:.1f} cm",
+        xy=(params['target_distance'], y_freccia),
+        xytext=(params['target_distance'] - 5, y_freccia - 0.4),
+        arrowprops=dict(arrowstyle="->"),
+        bbox=dict(boxstyle="round,pad=0.3", fc="w", ec="gray", alpha=0.8)
+    )
+
+    title = (
+        f"Traiettoria\n"
+        f"Angolo ottimale: {angle:.2f}° (rel. mira: {rel_angle:.2f}°)\n"
+        f"v₀: {v0:.1f} m/s, Tvolo: {tflight:.2f} s"
+    )
+    ax.set_title(title, fontsize=10)
+    ax.set_xlabel("Distanza (m)")
+    ax.set_ylabel("Altezza (m)")
+    ax.set_xlim(0, params['target_distance'] + 1)
+    y_max_traject = max(Y1.max(), (Y2.max() if Y2 is not None else 0), params['target_height'])
+    if show_mira:
+        y_mira_end = params['launch_height'] + np.tan(theta_rad) * params['target_distance']
+        y_max_traject = max(y_max_traject, y_mira_end)
+    ax.set_ylim(min(Y1.min(), params['target_height'], 0), math.ceil(y_max_traject) + 0.5)
+    ax.grid(True)
+    ax.legend()
+    return fig
+
 # --- INTERFACCIA STREAMLIT ---
 
 st.title("🏹 Simulatore avanzato tiro con l'arco")
 
-# Sidebar per parametri extra
+# Sidebar per drop curve
 st.sidebar.header("Curva Drop")
 d_min = st.sidebar.number_input("Distanza minima (m)", 5, 100, 10)
 d_max = st.sidebar.number_input("Distanza massima (m)", 10, 100, 50)
 d_step = st.sidebar.number_input("Passo (m)", 1, 10, 1)
-ref_distance = st.sidebar.number_input("Distanza di taratura (m)", 10, 100, 40)
 
 # Freccia
 st.header("Freccia")
@@ -168,6 +227,8 @@ target_height = st.number_input("Quota bersaglio (m)", -2.0, 3.0, 1.5)
 st.header("Opzioni")
 use_measured_v0 = st.checkbox("Usa velocità misurata")
 v0 = st.number_input("v₀ misurata (m/s)", 5.0, 120.0, 55.0, disabled=not use_measured_v0)
+show_mira = st.checkbox("Mostra linea di mira", value=True)
+show_compare = st.checkbox("Confronta con traiettoria ideale", value=False)
 
 if st.button("Calcola"):
     params = {
@@ -196,7 +257,6 @@ if st.button("Calcola"):
     angolo_finale, quota_finale = trova_angolo_convergenza(params)
     params['launch_height'] = quota_finale
 
-    # Calcolo angolo di mira e scarto
     dx = target_distance
     dy = target_height - quota_finale
     angolo_mira = np.degrees(np.arctan2(dy, dx))
@@ -204,15 +264,12 @@ if st.button("Calcola"):
 
     # Traiettoria
     X1, Y1, v0_calc, t1 = simulate_trajectory(angolo_finale, params, include_drag=True)
+    if show_compare:
+        X2, Y2, _, _ = simulate_trajectory(angolo_finale, params, include_drag=False)
+    else:
+        X2, Y2 = None, None
 
-    fig1, ax1 = plt.subplots()
-    ax1.plot(X1, Y1, label="Con drag (realistico)")
-    ax1.plot(target_distance, target_height, 'go', label="Bersaglio")
-    ax1.set_xlabel("Distanza (m)")
-    ax1.set_ylabel("Altezza (m)")
-    ax1.set_title("Traiettoria")
-    ax1.grid(True)
-    ax1.legend()
+    fig1 = plot_trajectory(X1, Y1, X2, Y2, params=params, angle=angolo_finale, v0=v0_calc, tflight=t1, show_mira=show_mira)
     st.pyplot(fig1)
 
     # --- Curva drop vs distanza ---
@@ -231,11 +288,10 @@ if st.button("Calcola"):
     axd.plot(distanze, drops, marker='o')
     axd.set_xlabel("Distanza (m)")
     axd.set_ylabel("Drop (cm)")
-    axd.set_title(f"Curva drop vs distanza (taratura a {ref_distance} m)")
+    axd.set_title("Curva del drop vs distanza")
     axd.grid(True)
     st.pyplot(fig2)
 
-    # Risultati
     st.success(
         f"**Angolo ottimale (orizzontale):** {angolo_finale:.2f}°\n"
         f"**Angolo di mira (punta→bersaglio):** {angolo_mira:.2f}°\n"
