@@ -2,7 +2,7 @@ import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize_scalar
-from scipy.interpolate import interp1d
+from scipy.interpolate import interp1d, UnivariateSpline
 import math
 
 # --- Costanti ---
@@ -23,7 +23,7 @@ BOW_TYPE_DEFAULT_EFF = {
     "takedown": 0.80,
 }
 
-# --- Funzioni di fisica/utility ---
+# --- Funzioni fisiche ---
 
 def reynolds_number(v, diameter):
     d_m = diameter / 1000
@@ -192,6 +192,7 @@ st.sidebar.header("Curva Drop")
 d_min = st.sidebar.number_input("Distanza minima (m)", 5, 100, 10)
 d_max = st.sidebar.number_input("Distanza massima (m)", 10, 100, 50)
 d_step = st.sidebar.number_input("Passo (m)", 1, 10, 1)
+d_query = st.sidebar.number_input("Distanza per query drop(x) (m)", 5, 100, 30)
 
 # Freccia
 st.header("Freccia")
@@ -284,13 +285,30 @@ if st.button("Calcola"):
         else:
             drops.append(None)
 
+    # Fit spline per drop(x)
+    valid_x = [d for d, dr in zip(distanze, drops) if dr is not None]
+    valid_y = [dr for dr in drops if dr is not None]
+    spline = None
+    if len(valid_x) > 3:
+        spline = UnivariateSpline(valid_x, valid_y, s=0)
+
     fig2, axd = plt.subplots()
-    axd.plot(distanze, drops, marker='o')
+    axd.plot(distanze, drops, "o", label="Simulazione")
+    if spline:
+        x_fit = np.linspace(min(valid_x), max(valid_x), 200)
+        y_fit = spline(x_fit)
+        axd.plot(x_fit, y_fit, "-", label="Fit spline")
     axd.set_xlabel("Distanza (m)")
     axd.set_ylabel("Drop (cm)")
-    axd.set_title("Curva del drop vs distanza")
+    axd.set_title("Curva drop vs distanza")
     axd.grid(True)
+    axd.legend()
     st.pyplot(fig2)
+
+    # Query drop(x) alla distanza scelta
+    if spline:
+        drop_q = float(spline(d_query))
+        st.info(f"Drop({d_query:.1f} m) ≈ {drop_q:.1f} cm")
 
     st.success(
         f"**Angolo ottimale (orizzontale):** {angolo_finale:.2f}°\n"
@@ -300,4 +318,5 @@ if st.button("Calcola"):
         f"**v₀:** {v0_calc:.2f} m/s\n"
         f"**Tempo volo:** {t1:.2f} s"
     )
+
 
