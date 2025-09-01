@@ -11,9 +11,9 @@ st.title("Proiezione sul riser del punto di impatto")
 st.image("mira.png", caption="Schema: occhio, cocca, riser e proiezione sul riser", use_container_width=True)
 
 # Parametri
-o = st.number_input("Distanza occhio–cocca o-c(m)", min_value=0.01, max_value=1.0, value=0.11, step=0.01)
+o = st.number_input("Distanza occhio–cocca o-c (m)", min_value=0.01, max_value=1.0, value=0.11, step=0.01)
 t = st.number_input("Distanza cocca–riser (m)", min_value=0.01, max_value=2.0, value=0.70, step=0.01)
-d = st.number_input("Drop (m)", min_value=0.0, max_value=1.0, value=0.0, step=0.01)
+d = st.number_input("Drop (m)", min_value=0.0, max_value=10.0, value=0.0, step=0.01)
 x_drop = st.number_input("Distanza bersaglio (m)", min_value=0.0, max_value=50.0, value=20.0, step=1.0)
 
 # Funzione y(x) in cm
@@ -30,17 +30,17 @@ y_drop_point = y_cm(x_drop, o, t, d)
 
 # Limiti dinamici Y
 ymin = min(np.min(y_vals_laser), y_drop_point)
-ymax = (o + d) * 100
+ymax = max(np.max(y_vals_laser), y_drop_point) * 1.05
 
 # Grafico
 fig, ax = plt.subplots(figsize=(8, 5))
 ax.plot(x_vals, y_vals_laser, label="Proiezione laser (d=0)", color="blue")
-ax.scatter([x_drop], [y_drop_point], color="red", s=60, label="drop")
+ax.scatter([x_drop], [y_drop_point], color="red", s=60, label="Punto con drop")
 ax.set_xlim(0, 50)
 ax.set_ylim(ymin, ymax)
 ax.set_xlabel("Distanza bersaglio (m)")
 ax.set_ylabel("Proiezione sul riser (cm)")
-ax.set_title("Curva della proiezione sul riser della linea di mira d=0")
+ax.set_title("Curva della proiezione sul riser della linea di mira")
 ax.grid(True, linestyle="--", alpha=0.6)
 ax.legend()
 st.pyplot(fig)
