@@ -40,35 +40,17 @@ def realistic_drag_coefficient(v, diameter, angle_of_attack, tip_type, params):
     gamma_rad = np.radians(angle_of_attack)
     Cd *= (1 + 4 * gamma_rad ** 2)
     Cd *= TIPO_PUNTA_CD_FACTOR.get(tip_type, 1.0)
-    # (Facoltativo) piccoli correttivi su FOC/spine
-    try:
-        foc = calcola_foc(params)
-        if foc > 10: Cd *= (1 + 0.02 * (foc - 10))
-    except: pass
-    try:
-        spine = params['spine']
-        Cd *= (1 + 0.001 * (spine - 500))
-    except: pass
     return Cd
 
-def calcola_foc(params):
-    lunghezza = params['length']
-    punto_equilibrio = params['balance_point']
-    centro_geometrico = lunghezza / 2
-    foc = ((punto_equilibrio - centro_geometrico) / lunghezza) * 100
-    return foc
-
 def calculate_velocity(params):
-    # Se v0 è misurata, la uso direttamente
     if params['use_measured_v0']:
         return params['v0']
     mass = params['mass'] / 1000.0
     F = params['draw_force'] * 4.44822
-    # >>> allungo effettivo dei flettenti: draw_length - brace_height
     elong = max(0.0, params['draw_length'] - params['brace_height'])
     efficiency = params['efficiency']
     E = efficiency * F * elong
-    return np.sqrt(max(0.0, 2 * E / mass))  # safe-guard
+    return np.sqrt(max(0.0, 2 * E / mass))
 
 def simulate_trajectory(angle_deg, params, include_drag=True):
     angle = np.radians(angle_deg)
@@ -99,9 +81,7 @@ def simulate_trajectory(angle_deg, params, include_drag=True):
         t += dt
         X.append(x)
         Y.append(y)
-    X = np.array(X)
-    Y = np.array(Y)
-    return X, Y, v0, t
+    return np.array(X), np.array(Y), v0, t
 
 def get_y_at_x(X, Y, x_target):
     f_interp = interp1d(X, Y, kind='linear', fill_value='extrapolate')
@@ -119,72 +99,11 @@ def find_optimal_angle(params):
     res = minimize_scalar(objective, bounds=(-20, 45), method='bounded')
     return res.x
 
-def plot_trajectory(X1, Y1, X2=None, Y2=None, params=None, angle=None, v0=None, tflight=None, show_mira=False):
-    fig, ax = plt.subplots()
-    ax.plot(X1, Y1, label="Con drag (realistico)")
-    if X2 is not None and Y2 is not None:
-        ax.plot(X2, Y2, label="Senza drag", linestyle='--')
-        y1_at_target = get_y_at_x(X1, Y1, params['target_distance'])
-        y2_at_target = get_y_at_x(X2, Y2, params['target_distance'])
-        delta_cm = abs(y1_at_target - y2_at_target) * 100
-        ax.annotate(
-            f"Δ: {delta_cm:.1f} cm",
-            xy=(params['target_distance'], y1_at_target),
-            xytext=(params['target_distance'] - 8, max(y1_at_target, y2_at_target) + 0.5),
-            arrowprops=dict(arrowstyle="->"),
-            bbox=dict(boxstyle="round,pad=0.3", fc="w", ec="gray", alpha=0.8)
-        )
-    ax.plot(params['target_distance'], params['target_height'], 'go', label="Bersaglio")
-
-    dx = params['target_distance']
-    dy = params['target_height'] - params['launch_height']
-    mira_angle = np.degrees(np.arctan2(dy, dx))
-    rel_angle = angle - mira_angle
-
-    y0 = params['launch_height']
-    theta_rad = np.radians(angle)
-    if show_mira:
-        x_mira = np.array([0, params['target_distance']])
-        y_mira = y0 + np.tan(theta_rad) * x_mira
-        ax.plot(x_mira, y_mira, 'k--', label="Linea di mira (tangente all'uscita)")
-
-    # Drop rispetto alla linea di mira al bersaglio
-    y_freccia = get_y_at_x(X1, Y1, params['target_distance'])
-    y_mira_finale = y0 + np.tan(theta_rad) * params['target_distance']
-    drop_cm = (y_mira_finale - y_freccia) * 100
-    ax.annotate(
-        f"Drop: {drop_cm:.1f} cm",
-        xy=(params['target_distance'], y_freccia),
-        xytext=(params['target_distance'] - 5, y_freccia - 0.4),
-        arrowprops=dict(arrowstyle="->"),
-        bbox=dict(boxstyle="round,pad=0.3", fc="w", ec="gray", alpha=0.8)
-    )
-
-    title = (
-        f"Traiettoria della freccia\n"
-        f"Angolo ottimale: {angle:.2f}° (rel. mira: {rel_angle:.2f}°)\n"
-        f"v₀: {v0:.1f} m/s, Tvolo: {tflight:.2f} s"
-    )
-    ax.set_title(title, fontsize=10)
-    ax.set_xlabel("Distanza orizzontale (m)")
-    ax.set_ylabel("Altezza (m)")
-    ax.set_xlim(0, params['target_distance'] + 1)
-    y_max_traject = max(Y1.max(), (Y2.max() if Y2 is not None else 0), params['target_height'])
-    if show_mira:
-        y_mira_end = params['launch_height'] + np.tan(theta_rad) * params['target_distance']
-        y_max_traject = max(y_max_traject, y_mira_end)
-    ax.set_ylim(min(Y1.min(), params['target_height'], 0), math.ceil(y_max_traject) + 0.5)
-    ax.grid(True)
-    ax.legend()
-    return fig
-
 def calcola_quota_uscita_posturale(params, angle_rad):
     anchor_length = params['anchor_length']
     quota_uscita_neutra = params['launch_height_neutral']
     pelvis_height = params['pelvis_height']
-    # pivot = (-anchor_length, quota_neutra - pelvis)
     y_pivot = quota_uscita_neutra - pelvis_height
-    # vettore pivot->punta neutra: (dx, dy) = (anchor, pelvis)
     dx = anchor_length
     dy = pelvis_height
     raggio_rot = np.sqrt(dx**2 + dy**2)
@@ -206,59 +125,49 @@ def trova_angolo_convergenza(params, tol_angle=0.01, tol_height=0.001, max_iter=
 
 # --- INTERFACCIA STREAMLIT ---
 
-st.title("Simulatore avanzato tiro con l'arco")
+st.title("🏹 Simulatore avanzato tiro con l'arco")
 
-# FRECCIA
+# Sidebar per parametri extra
+st.sidebar.header("Curva Drop")
+d_min = st.sidebar.number_input("Distanza minima (m)", 5, 100, 10)
+d_max = st.sidebar.number_input("Distanza massima (m)", 10, 100, 50)
+d_step = st.sidebar.number_input("Passo (m)", 1, 10, 1)
+ref_distance = st.sidebar.number_input("Distanza di taratura (m)", 10, 100, 40)
+
+# Freccia
 st.header("Freccia")
-col1, col2 = st.columns(2)
-with col1:
-    mass = st.number_input("Peso (g)", 10.0, 50.0, 24.0)
-    length = st.number_input("Lunghezza (m)", 0.5, 1.0, 0.75)
-    diameter = st.number_input("Diametro (mm)", 4.0, 8.0, 6.2)
-    spine = st.number_input("Spine", 200, 1200, 700)
-with col2:
-    balance_point = st.number_input("Punto di bilanciamento (m)", 0.2, 0.8, 0.4)
-    tip_type = st.selectbox("Tipo di punta", ["Standard", "Slanciata (field/bullet)", "Broadhead (larga)"])
+mass = st.number_input("Peso (g)", 10.0, 50.0, 24.0)
+length = st.number_input("Lunghezza (m)", 0.5, 1.0, 0.75)
+diameter = st.number_input("Diametro (mm)", 4.0, 8.0, 6.2)
+spine = st.number_input("Spine", 200, 1200, 700)
+balance_point = st.number_input("Punto di bilanciamento (m)", 0.2, 0.8, 0.4)
+tip_type = st.selectbox("Tipo di punta", list(TIPO_PUNTA_CD_FACTOR.keys()))
 
-# ARCO
+# Arco
 st.header("Arco")
-col3, col4, colB = st.columns(3)
-with col3:
-    draw_force = st.number_input("Forza (lb)", 10.0, 80.0, 36.0)
-    draw_length = st.number_input("Allungo (m)", 0.5, 1.1, 0.70)
-with col4:
-    efficiency = st.number_input("Efficienza", 0.5, 0.95, 0.82)
-    bow_type = st.selectbox("Tipo di arco", ["longbow", "ricurvo", "compound", "takedown"])
-with colB:
-    # >>> nuovo parametro
-    brace_height = st.number_input("Brace (m)", 0.05, 0.30, 0.18)
+draw_force = st.number_input("Forza (lb)", 10.0, 80.0, 36.0)
+draw_length = st.number_input("Allungo (m)", 0.5, 1.1, 0.70)
+brace_height = st.number_input("Brace (m)", 0.05, 0.30, 0.18)
+efficiency = st.number_input("Efficienza", 0.5, 0.95, 0.82)
+bow_type = st.selectbox("Tipo di arco", list(BOW_TYPE_DEFAULT_EFF.keys()))
 
-# ARCIERE
-st.header("Arciere (biometria e postura)")
-col5, col6 = st.columns(2)
-with col5:
-    launch_height_neutral = st.number_input("Quota uscita freccia neutra (m)", 0.8, 2.2, 1.5)
-    anchor_length = st.number_input("Lunghezza spalla-punto aggancio (m)", 0.4, 1.0, 0.75)
-with col6:
-    pelvis_height = st.number_input("Quota bacino (m)", 0.3, 1.5, 1.0)
-    eye_offset_v = st.number_input("Offset verticale occhio (m)", 0.01, 0.25, 0.09)
-
+# Arciere
+st.header("Arciere")
+launch_height_neutral = st.number_input("Quota uscita freccia neutra (m)", 0.8, 2.2, 1.5)
+anchor_length = st.number_input("Lunghezza spalla-punto aggancio (m)", 0.4, 1.0, 0.75)
+pelvis_height = st.number_input("Quota bacino (m)", 0.3, 1.5, 1.0)
+eye_offset_v = st.number_input("Offset verticale occhio (m)", 0.01, 0.25, 0.09)
 posture = st.selectbox("Postura", ["in piedi", "inginocchiato"])
 
-# BERSAGLIO
+# Bersaglio
 st.header("Bersaglio")
-col7, col8 = st.columns(2)
-with col7:
-    target_distance = st.number_input("Distanza bersaglio (m)", 1.0, 150.0, 40.0)
-with col8:
-    target_height = st.number_input("Quota bersaglio (m)", -2.0, 3.0, 1.5)
+target_distance = st.number_input("Distanza bersaglio (m)", 1.0, 150.0, 40.0)
+target_height = st.number_input("Quota bersaglio (m)", -2.0, 3.0, 1.5)
 
-# OPZIONI
+# Opzioni
 st.header("Opzioni")
 use_measured_v0 = st.checkbox("Usa velocità misurata")
 v0 = st.number_input("v₀ misurata (m/s)", 5.0, 120.0, 55.0, disabled=not use_measured_v0)
-show_mira = st.checkbox("Mostra linea di mira", value=True)
-show_compare = st.checkbox("Confronta con traiettoria ideale (senza drag)", value=False)
 
 if st.button("Calcola"):
     params = {
@@ -270,8 +179,8 @@ if st.button("Calcola"):
         'tip_type': tip_type,
         'draw_force': draw_force,
         'draw_length': draw_length,
-        'brace_height': brace_height,  # <<< nuovo parametro usato nel calcolo energia
-        'efficiency': efficiency,      # potrà essere rimpiazzata sotto
+        'brace_height': brace_height,
+        'efficiency': efficiency,
         'bow_type': bow_type,
         'launch_height_neutral': launch_height_neutral,
         'anchor_length': anchor_length,
@@ -282,57 +191,57 @@ if st.button("Calcola"):
         'target_height': target_height,
         'use_measured_v0': use_measured_v0,
         'v0': v0 if use_measured_v0 else 0.0,
-        'show_mira': show_mira,
-        'show_compare': show_compare,
     }
 
-    # Controllo coerenza allungo/brace
-    elong_eff = draw_length - brace_height
-    if elong_eff <= 0:
-        st.warning("⚠️ Brace ≥ allungo: l'allungo effettivo dei flettenti è nullo o negativo. "
-                   "Controlla i valori di allungo e brace.")
-
-    # Se NON usiamo v0 misurata: imposta efficienza del tipo di arco (se vuoi puoi lasciare manuale)
-    if not use_measured_v0:
-        params['efficiency'] = BOW_TYPE_DEFAULT_EFF.get(bow_type, efficiency)
-    else:
-        # Stima efficienza da v0 misurata usando l'allungo effettivo dei flettenti
-        mass_kg = mass / 1000.0
-        F = draw_force * 4.44822
-        E_cinetica = 0.5 * mass_kg * v0 ** 2
-        E_elastica = max(0.0, F * elong_eff)
-        eff_calc = (E_cinetica / E_elastica) if E_elastica > 0 else 0.0
-        params['efficiency'] = eff_calc  # informativa; v0 resta quella misurata
-
-    # Iterazione postura -> angolo
     angolo_finale, quota_finale = trova_angolo_convergenza(params)
     params['launch_height'] = quota_finale
 
+    # Calcolo angolo di mira e scarto
+    dx = target_distance
+    dy = target_height - quota_finale
+    angolo_mira = np.degrees(np.arctan2(dy, dx))
+    rel_angle = angolo_finale - angolo_mira
+
+    # Traiettoria
     X1, Y1, v0_calc, t1 = simulate_trajectory(angolo_finale, params, include_drag=True)
-    if show_compare:
-        X2, Y2, _, _ = simulate_trajectory(angolo_finale, params, include_drag=False)
-    else:
-        X2, Y2 = None, None
 
-    fig = plot_trajectory(X1, Y1, X2, Y2, params=params, angle=angolo_finale, v0=v0_calc, tflight=t1, show_mira=show_mira)
-    st.pyplot(fig)
+    fig1, ax1 = plt.subplots()
+    ax1.plot(X1, Y1, label="Con drag (realistico)")
+    ax1.plot(target_distance, target_height, 'go', label="Bersaglio")
+    ax1.set_xlabel("Distanza (m)")
+    ax1.set_ylabel("Altezza (m)")
+    ax1.set_title("Traiettoria")
+    ax1.grid(True)
+    ax1.legend()
+    st.pyplot(fig1)
 
-    # Output sintetico
-    if use_measured_v0:
-        st.success(
-            f"**Angolo ottimale:** {angolo_finale:.2f}°\n"
-            f"**Quota uscita:** {quota_finale:.2f} m\n"
-            f"**v₀ (misurata):** {v0:.2f} m/s\n"
-            f"**Tempo volo:** {t1:.2f} s\n"
-            f"**Allungo eff. flettenti:** {max(0.0, elong_eff):.3f} m\n"
-            f"**Efficienza stimata:** {params['efficiency']*100:.1f}%"
-        )
-    else:
-        st.success(
-            f"**Angolo ottimale:** {angolo_finale:.2f}°\n"
-            f"**Quota uscita:** {quota_finale:.2f} m\n"
-            f"**v₀ (calcolata):** {v0_calc:.2f} m/s\n"
-            f"**Tempo volo:** {t1:.2f} s\n"
-            f"**Allungo eff. flettenti:** {max(0.0, elong_eff):.3f} m\n"
-            f"**Efficienza usata (tipo arco):** {params['efficiency']*100:.1f}%"
-        )
+    # --- Curva drop vs distanza ---
+    distanze = np.arange(d_min, d_max+1, d_step)
+    drops = []
+    for d in distanze:
+        if d <= X1.max():
+            y_freccia = get_y_at_x(X1, Y1, d)
+            y_mira = quota_finale + np.tan(np.radians(angolo_finale)) * d
+            drop_cm = (y_mira - y_freccia) * 100
+            drops.append(drop_cm)
+        else:
+            drops.append(None)
+
+    fig2, axd = plt.subplots()
+    axd.plot(distanze, drops, marker='o')
+    axd.set_xlabel("Distanza (m)")
+    axd.set_ylabel("Drop (cm)")
+    axd.set_title(f"Curva drop vs distanza (taratura a {ref_distance} m)")
+    axd.grid(True)
+    st.pyplot(fig2)
+
+    # Risultati
+    st.success(
+        f"**Angolo ottimale (orizzontale):** {angolo_finale:.2f}°\n"
+        f"**Angolo di mira (punta→bersaglio):** {angolo_mira:.2f}°\n"
+        f"**Scarto rispetto mira:** {rel_angle:+.2f}°\n"
+        f"**Quota uscita:** {quota_finale:.2f} m\n"
+        f"**v₀:** {v0_calc:.2f} m/s\n"
+        f"**Tempo volo:** {t1:.2f} s"
+    )
+
