@@ -208,8 +208,8 @@ st.title("🏹 Simulatore + Generatore di Mirino (riser)")
 with st.sidebar:
     st.header("Curva Drop")
     d_min = st.number_input("Distanza minima (m)", 5, 100, 10)
-    d_max = st.number_input("Distanza massima (m)", 10, 100, 60)
-    d_step = st.number_input("Passo (m)", 1, 10, 10)
+    d_max = st.number_input("Distanza massima (m)", 10, 100, 50)
+    d_step = st.number_input("Passo (m)", 1, 10, 5)
     fit_degree = st.slider("Grado polinomio per drop(x)", 1, 5, 2)
     d_query = st.number_input("Distanza per query drop(x) (m)", 5, 100, 30)
 
@@ -241,7 +241,7 @@ with colB:
     posture = st.selectbox("Postura", ["in piedi", "inginocchiato"])
 
     st.subheader("Bersaglio")
-    target_distance = st.number_input("Distanza bersaglio (m)", 1.0, 150.0, 40.0)
+    target_distance = st.number_input("Distanza bersaglio (m)", 1.0, 150.0, 50.0)
     target_height = st.number_input("Quota bersaglio (m)", -2.0, 3.0, 1.5)
 
     st.subheader("Opzioni balistiche")
@@ -442,4 +442,5 @@ if st.button("Calcola e genera mirino"):
         f"**v₀:** {v0_calc:.2f} m/s\n"
         f"**Tempo volo:** {t1:.2f} s"
     )
+
 
