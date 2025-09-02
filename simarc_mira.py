@@ -1,4 +1,4 @@
-# simarc_mira_streamlit.py
+# simarc_mira.py (completo)
 import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
@@ -7,6 +7,10 @@ from scipy.interpolate import interp1d, UnivariateSpline
 import io
 import pandas as pd
 import math
+
+# --- PDF (nuovo) ---
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
 
 # ------------------ COSTANTI ------------------
 G = 9.81
@@ -42,7 +46,7 @@ def realistic_drag_coefficient(v, diameter_mm, angle_of_attack_deg, tip_type, pa
     gamma_rad = np.radians(angle_of_attack_deg)
     Cd *= (1 + 4 * gamma_rad**2)
     Cd *= TIPO_PUNTA_CD_FACTOR.get(tip_type, 1.0)
-    # (light) correttivi empirici opzionali:
+    # (light) correttivo opzionale su spine
     try:
         spine = params['spine']
         Cd *= (1 + 0.001 * (spine - 500))
@@ -191,13 +195,65 @@ def plot_trajectory(X1, Y1, X2=None, Y2=None, params=None, angle=None, v0=None, 
     ax.legend()
     return fig
 
-# ------------------ GEOMETRIA RISER (dal tuo mira.py) ------------------
+# ------------------ GEOMETRIA RISER ------------------
 # y_cm: proiezione sul riser (cm) di un punto a distanza x, con drop d (m)
 def y_cm(x, o, t, d=0.0):
     # o = distanza occhio–cocca [m], t = distanza cocca–riser [m]
     u = (o + d) / (t + x)
     y_calc = 100.0 * x * (u / np.sqrt(1 + u**2))
     return y_calc - d * 100.0  # tolgo il drop espresso in cm
+
+# ------------------ PDF MIRINO (NUOVO) ------------------
+def esporta_mirino_pdf_bytes(df_proj, filename="mirino_riser.pdf"):
+    """Genera un PDF in scala 1:1 (cm reali) con la colonna del riser e le tacche."""
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    width, height = A4
+
+    def cm2pt(x): return x * 28.346  # 1 cm = 28.346 pt
+
+    # range proiezioni (cm)
+    y_vals = df_proj["Proiezione riser (cm)"].dropna().values
+    if len(y_vals) == 0:
+        return None
+    y_min, y_max = float(np.min(y_vals)), float(np.max(y_vals))
+
+    # margini (pt)
+    margin_left = 50
+    margin_right = 50
+    margin_top = 50
+    margin_bottom = 50
+
+    # posizioniamo la colonna al centro orizzontale
+    x_center = width / 2
+
+    # base verticale: sfruttiamo le coordinate in cm -> pt partendo da y=margin_bottom
+    # per mantenere la scala reale anche con valori negativi:
+    y0_pt = margin_bottom - cm2pt(y_min)
+
+    # colonna verticale (il "riser")
+    c.setLineWidth(2)
+    c.line(x_center, y0_pt + cm2pt(y_min), x_center, y0_pt + cm2pt(y_max))
+
+    # tacche ed etichette
+    c.setFont("Helvetica", 10)
+    for _, row in df_proj.dropna().iterrows():
+        y_pt = y0_pt + cm2pt(row["Proiezione riser (cm)"])
+        c.setLineWidth(1)
+        c.line(x_center - 20, y_pt, x_center + 20, y_pt)  # tacca
+        c.drawString(x_center + 30, y_pt - 3, f"{int(row['Distanza (m)'])} m")
+
+    # barra metrica 5 cm per controllo stampa
+    c.setLineWidth(3)
+    y_bar = y0_pt + cm2pt(y_min) - 30
+    c.line(x_center - cm2pt(2.5), y_bar, x_center + cm2pt(2.5), y_bar)
+    c.setFont("Helvetica", 9)
+    c.drawCentredString(x_center, y_bar - 12, "Barra 5 cm (controllo scala)")
+
+    c.showPage()
+    c.save()
+    buf.seek(0)
+    return buf, filename
 
 # ============================================================
 #                      INTERFACCIA
@@ -270,7 +326,7 @@ if st.button("Calcola e genera mirino"):
         'use_measured_v0': use_measured_v0, 'v0': v0 if use_measured_v0 else 0.0
     }
 
-    # Se non v0 misurata: preset efficienza per tipo arco SOLO se l'utente non ha messo un valore "suo"
+    # Se non v0 misurata: preset efficienza per tipo arco SOLO se l’utente non ha messo un valore diverso
     if not use_measured_v0 and abs(efficiency - 0.82) < 1e-6:
         params['efficiency'] = BOW_TYPE_DEFAULT_EFF.get(bow_type, efficiency)
 
@@ -385,12 +441,12 @@ if st.button("Calcola e genera mirino"):
 
     proj_rows = []
     for d in distanze:
-        if d < (valid_x.min() if len(valid_x) else d_min) or d > (valid_x.max() if len(valid_x) else d_max):
+        if len(valid_x) and (d < valid_x.min() or d > valid_x.max()):
             proj_rows.append((d, np.nan, np.nan))
             continue
         drop_cm_val = drop_cm_at(d)  # cm
-        drop_m_val = drop_cm_val / 100.0
-        yproj = y_cm(d, o_eye_cock, t_cock_riser, d=drop_m_val)  # cm
+        drop_m_val = drop_cm_val / 100.0 if drop_cm_val is not None and not np.isnan(drop_cm_val) else np.nan
+        yproj = y_cm(d, o_eye_cock, t_cock_riser, d=drop_m_val if not np.isnan(drop_m_val) else 0.0)  # cm
         proj_rows.append((d, drop_cm_val, yproj))
 
     df_proj = pd.DataFrame(proj_rows, columns=["Distanza (m)", "Drop (cm)", "Proiezione riser (cm)"])
@@ -399,7 +455,15 @@ if st.button("Calcola e genera mirino"):
     # Scarica CSV
     csv_buf = io.StringIO()
     df_proj.to_csv(csv_buf, index=False)
-    st.download_button("⬇️ Scarica mirino (CSV)", data=csv_buf.getvalue(), file_name="mirino_riser.csv", mime="text/csv")
+    st.download_button("⬇️ Scarica mirino (CSV)", data=csv_buf.getvalue(),
+                       file_name="mirino_riser.csv", mime="text/csv")
+
+    # Scarica PDF stampabile (nuovo)
+    pdf_buf_name = esporta_mirino_pdf_bytes(df_proj)
+    if pdf_buf_name is not None:
+        pdf_buf, pdf_name = pdf_buf_name
+        st.download_button("📄 Scarica mirino stampabile (PDF)", data=pdf_buf,
+                           file_name=pdf_name, mime="application/pdf")
 
     # ---- Grafico "mirino" come scala verticale con tacche
     st.markdown("### Scala del mirino (tacche sul riser)")
@@ -427,7 +491,7 @@ if st.button("Calcola e genera mirino"):
         axm.set_yticks(np.linspace(round(y_min_plot), round(y_max_plot), 9))
         axm.set_xticks([])
         axm.set_title("Mirino – proiezione tacche sul riser (cm)")
-        axm.set_ylabel("Quota (cm) sulla colonna del riser")
+        axm.set_ylabel("Quota (cm) sulla colonna del riser)")
         axm.grid(True, axis='y', linestyle='--', alpha=0.3)
         st.pyplot(fig_m, use_container_width=False)
     else:
@@ -442,5 +506,6 @@ if st.button("Calcola e genera mirino"):
         f"**v₀:** {v0_calc:.2f} m/s\n"
         f"**Tempo volo:** {t1:.2f} s"
     )
+
 
 
