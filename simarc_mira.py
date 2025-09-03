@@ -1,4 +1,4 @@
-# simarc_mira.py
+# simarc_mira.py (completo)
 import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
@@ -7,12 +7,12 @@ from scipy.interpolate import interp1d, UnivariateSpline
 import io
 import pandas as pd
 import math
+
+# --- PDF (nuovo) ---
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
-# ==============================
-#          COSTANTI
-# ==============================
+# ------------------ COSTANTI ------------------
 G = 9.81
 air_density = 1.204
 mu_air = 1.81e-5
@@ -30,9 +30,7 @@ BOW_TYPE_DEFAULT_EFF = {
     "takedown": 0.80,
 }
 
-# ==============================
-#     FUNZIONI BALISTICHE
-# ==============================
+# ------------------ FISICA / MODELLI ------------------
 def reynolds_number(v, diameter_mm):
     d_m = diameter_mm / 1000.0
     return air_density * v * d_m / mu_air
@@ -48,20 +46,26 @@ def realistic_drag_coefficient(v, diameter_mm, angle_of_attack_deg, tip_type, pa
     gamma_rad = np.radians(angle_of_attack_deg)
     Cd *= (1 + 4 * gamma_rad**2)
     Cd *= TIPO_PUNTA_CD_FACTOR.get(tip_type, 1.0)
+    # (light) correttivo opzionale su spine
+    try:
+        spine = params['spine']
+        Cd *= (1 + 0.001 * (spine - 500))
+    except Exception:
+        pass
     return Cd
 
 def calculate_velocity(params):
-    """Se v0 misurata è fornita la usa, altrimenti calcola da energia elastica: eff * F * (draw - brace)."""
+    # v0 misurata -> uso diretto
     if params['use_measured_v0']:
         return params['v0']
+    # v0 calcolata da energia elastica utile: eff * F * (draw_length - brace)
     mass = params['mass'] / 1000.0
-    F = params['draw_force'] * 4.44822  # lb -> N
+    F = params['draw_force'] * 4.44822
     elong = max(0.0, params['draw_length'] - params['brace_height'])
     E = params['efficiency'] * F * elong
     return np.sqrt(max(0.0, 2 * E / mass))
 
 def simulate_trajectory(angle_deg, params, include_drag=True):
-    """Integrazione semplice (Euler) fino alla distanza del bersaglio."""
     angle = np.radians(angle_deg)
     mass = params['mass'] / 1000.0
     v0 = calculate_velocity(params)
@@ -108,7 +112,7 @@ def find_optimal_angle(params):
     return res.x
 
 def calcola_quota_uscita_posturale(params, angle_rad):
-    """Rotazione del vettore pivot (bacino) -> punta freccia (x=0)."""
+    # Rotazione del vettore pivot->punta (pivot a quota bacino)
     anchor_length = params['anchor_length']
     y_neutral = params['launch_height_neutral']
     pelvis = params['pelvis_height']
@@ -116,10 +120,10 @@ def calcola_quota_uscita_posturale(params, angle_rad):
     dx, dy = anchor_length, pelvis
     r = np.sqrt(dx**2 + dy**2)
     phi0 = np.arcsin(dy / r)
-    return y_pivot + r * np.sin(angle_rad + phi0)
+    y_launch = y_pivot + r * np.sin(angle_rad + phi0)
+    return y_launch
 
 def trova_angolo_convergenza(params, tol_angle=0.01, tol_height=0.001, max_iter=25):
-    """Itera: angolo ottimale -> nuova quota di uscita per postura T -> fino a convergenza."""
     quota_uscita = params['launch_height_neutral']
     angolo = 0.0
     for _ in range(max_iter):
@@ -131,21 +135,7 @@ def trova_angolo_convergenza(params, tol_angle=0.01, tol_height=0.001, max_iter=
         angolo, quota_uscita = angolo_nuovo, y_launch_new
     return angolo, quota_uscita
 
-# ==============================
-#     GEOMETRIA DEL RISER
-# ==============================
-def y_cm(x, o, t, d=0.0):
-    """
-    Proiezione sul riser (cm) di un punto a distanza x (m) con drop d (m).
-    o = distanza occhio–cocca [m], t = distanza cocca–riser [m]
-    """
-    u = (o + d) / (t + x)
-    y_calc = 100.0 * x * (u / np.sqrt(1 + u**2))
-    return y_calc - d * 100.0
-
-# ==============================
-#    PLOT TRAIETTORIA (UI)
-# ==============================
+# ------------------ PLOT TRAIETTORIA ------------------
 def plot_trajectory(X1, Y1, X2=None, Y2=None, params=None, angle=None, v0=None, tflight=None, show_mira=True):
     fig, ax = plt.subplots()
     ax.plot(X1, Y1, label="Con drag (realistico)")
@@ -164,22 +154,20 @@ def plot_trajectory(X1, Y1, X2=None, Y2=None, params=None, angle=None, v0=None, 
 
     ax.plot(params['target_distance'], params['target_height'], 'go', label="Bersaglio")
 
-    # angolo "di mira" (punta->bersaglio) per il solo testo; la linea tracciata sotto segue l'angolo di lancio
     dx = params['target_distance']
     dy = params['target_height'] - params['launch_height']
     mira_angle = np.degrees(np.arctan2(dy, dx))
     rel_angle = angle - mira_angle
 
-    # "linea di mira" (qui la disegniamo come linea all'angolo di lancio, utile per definire il drop)
     y0 = params['launch_height']
-    theta_rad = np.radians(angle)
+    th = np.radians(angle)
     if show_mira:
         x_mira = np.array([0, params['target_distance']])
-        y_mira = y0 + np.tan(theta_rad) * x_mira
+        y_mira = y0 + np.tan(th) * x_mira
         ax.plot(x_mira, y_mira, 'k--', label="Linea di mira")
 
     y_freccia = get_y_at_x(X1, Y1, params['target_distance'])
-    y_mira_finale = y0 + np.tan(theta_rad) * params['target_distance']
+    y_mira_finale = y0 + np.tan(th) * params['target_distance']
     drop_cm = (y_mira_finale - y_freccia) * 100.0
     ax.annotate(
         f"Drop: {drop_cm:.1f} cm",
@@ -200,90 +188,75 @@ def plot_trajectory(X1, Y1, X2=None, Y2=None, params=None, angle=None, v0=None, 
     ax.set_xlim(0, params['target_distance'] + 1)
     y_max = max(Y1.max(), (Y2.max() if Y2 is not None else 0), params['target_height'])
     if show_mira:
-        y_mira_end = params['launch_height'] + np.tan(theta_rad) * params['target_distance']
+        y_mira_end = params['launch_height'] + np.tan(th) * params['target_distance']
         y_max = max(y_max, y_mira_end)
     ax.set_ylim(min(Y1.min(), params['target_height'], 0), math.ceil(y_max) + 0.5)
     ax.grid(True)
     ax.legend()
     return fig
 
-# ==============================
+# ------------------ GEOMETRIA RISER ------------------
+# y_cm: proiezione sul riser (cm) di un punto a distanza x, con drop d (m)
+def y_cm(x, o, t, d=0.0):
+    # o = distanza occhio–cocca [m], t = distanza cocca–riser [m]
+    u = (o + d) / (t + x)
+    y_calc = 100.0 * x * (u / np.sqrt(1 + u**2))
+    return y_calc - d * 100.0  # tolgo il drop espresso in cm
+
+## ==============================
 #        PDF DEL MIRINO
 # ==============================
-def esporta_mirino_pdf_bytes(df_proj, mark_distance=30.0, scale_corr=1.0,
+def esporta_mirino_pdf_bytes(df_proj, o_eye_cock, t_cock_riser,
+                             mark_distance=30.0, scale_corr=1.0,
                              filename="mirino_riser.pdf"):
-    """
-    PDF in scala 1:1 (cm reali) con:
-      - colonna del riser con tacche,
-      - linea base y=0 cm (rossa),
-      - marcatore punto di mira a 'mark_distance',
-      - barra orizzontale 5 cm (controllo X),
-      - barra verticale 5 cm (controllo Y).
-    """
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
     width, height = A4
 
-    def cm2pt(x_cm):  # 1 cm = 28.346 pt
-        return x_cm * 28.346 * scale_corr
+    def cm2pt(x_cm): return x_cm * 28.346 * scale_corr
 
     y_vals = df_proj["Proiezione riser (cm)"].dropna().values
     if len(y_vals) == 0:
         return None
     y_min, y_max = float(np.min(y_vals)), float(np.max(y_vals))
 
-    # posizionamento
-    margin_bottom = 50  # pt
     x_center = width / 2.0
-    y0_pt = margin_bottom - cm2pt(y_min)  # mappa il valore minimo a y=margin_bottom
+    y0_pt = 50 - cm2pt(y_min)
 
-    # colonna verticale
+    # colonna riser
     c.setLineWidth(2)
-    c.setStrokeColorRGB(0, 0, 0)
     c.line(x_center, y0_pt + cm2pt(y_min), x_center, y0_pt + cm2pt(y_max))
 
-    # tacche + etichette
-    c.setFont("Helvetica", 10)
+    # tacche
     for _, row in df_proj.dropna().iterrows():
-        y_pt = y0_pt + cm2pt(float(row["Proiezione riser (cm)"]))
-        c.setLineWidth(1)
+        y_pt = y0_pt + cm2pt(row["Proiezione riser (cm)"])
         c.line(x_center - 20, y_pt, x_center + 20, y_pt)
+        c.setFont("Helvetica", 10)
         c.drawString(x_center + 30, y_pt - 3, f"{int(row['Distanza (m)'])} m")
 
     # linea base y=0
     y_zero_pt = y0_pt + cm2pt(0.0)
     c.setStrokeColorRGB(1, 0, 0)
-    c.setLineWidth(1)
     c.line(x_center - cm2pt(2.0), y_zero_pt, x_center + cm2pt(2.0), y_zero_pt)
-    c.setFont("Helvetica", 9)
-    c.drawString(x_center + 30, y_zero_pt - 3, "y = 0 cm (base)")
+    c.drawString(x_center + 30, y_zero_pt - 3, "y=0 cm (base)")
     c.setStrokeColorRGB(0, 0, 0)
 
-    # punto mira @ mark_distance (interp se necessario)
-    try:
-        if mark_distance in df_proj["Distanza (m)"].values:
-            y_mark_cm = float(df_proj.loc[df_proj["Distanza (m)"] == mark_distance, "Proiezione riser (cm)"].iloc[0])
-        else:
-            xx = df_proj["Distanza (m)"].values.astype(float)
-            yy = df_proj["Proiezione riser (cm)"].values.astype(float)
-            y_mark_cm = float(np.interp(mark_distance, xx, yy))
-        y_mark_pt = y0_pt + cm2pt(y_mark_cm)
-        c.setFillColorRGB(0, 0, 1)
-        c.circle(x_center, y_mark_pt, 2.5, fill=1, stroke=0)
-        c.setFillColorRGB(0, 0, 0)
-        c.setFont("Helvetica-Bold", 10)
-        c.drawString(x_center + 30, y_mark_pt - 4, f"Punto mira @ {int(mark_distance)} m")
-    except Exception:
-        pass
+    # punto laser @30 m
+    y_laser_30 = y_cm(30.0, o_eye_cock, t_cock_riser, d=0.0)
+    axm.scatter(0, y_laser_30, color="blue", zorder=5)
+    axm.text(0.6, y_laser_30, "Laser 30 m", va="center", fontsize=8, color="blue")
+    c.setFillColorRGB(0, 0, 1)
+    c.circle(x_center, y_laser_pt, 2.5, fill=1, stroke=0)
+    c.setFillColorRGB(0, 0, 0)
+    c.drawString(x_center + 30, y_laser_pt - 4, "Laser 30 m")
 
-    # barra orizzontale 5 cm (controllo X)
-    c.setLineWidth(3)
+    # barre di controllo
     y_bar = y0_pt + cm2pt(y_min) - 40
+    c.setLineWidth(3)
+    # orizzontale
     c.line(x_center - cm2pt(2.5), y_bar, x_center + cm2pt(2.5), y_bar)
-    c.setFont("Helvetica", 9)
     c.drawCentredString(x_center, y_bar - 12, "Barra 5 cm (orizzontale)")
-
-    # barra verticale 5 cm (controllo Y)
+    # verticale
     x_bar = x_center + 80
     c.line(x_bar, y_bar, x_bar, y_bar + cm2pt(5.0))
     c.drawCentredString(x_bar, y_bar - 12, "Barra 5 cm (verticale)")
@@ -293,28 +266,22 @@ def esporta_mirino_pdf_bytes(df_proj, mark_distance=30.0, scale_corr=1.0,
     buf.seek(0)
     return buf, filename
 
-# ==============================
-#      INTERFACCIA STREAMLIT
-# ==============================
-st.set_page_config(page_title="Simulatore + Mirino", layout="wide")
+
+# ============================================================
+#                      INTERFACCIA
+# ============================================================
+st.set_page_config(page_title="Simulatore balistico + Mirino", layout="wide")
 st.title("🏹 Simulatore + Generatore di Mirino (riser)")
 
-# Sidebar (drop + stampa)
 with st.sidebar:
     st.header("Curva Drop")
     d_min = st.number_input("Distanza minima (m)", 5, 100, 10)
     d_max = st.number_input("Distanza massima (m)", 10, 100, 50)
     d_step = st.number_input("Passo (m)", 1, 10, 5)
-    fit_degree = st.slider("Grado polinomio drop(x)", 1, 5, 2)
-    d_query = st.number_input("Query drop(x) a distanza (m)", 5, 100, 30)
+    fit_degree = st.slider("Grado polinomio per drop(x)", 1, 5, 2)
+    d_query = st.number_input("Distanza per query drop(x) (m)", 5, 100, 30)
 
-    st.header("PDF stampabile")
-    mark_distance = st.number_input("Distanza da marcare (m)", 10, 100, 30)
-    scala_perc = st.number_input("Correzione scala stampa (%)", 80.0, 120.0, 100.0, step=0.5,
-                                 help="Usa 100% per stampa reale. Se la barra 5 cm esce 4.87 cm, metti 102.7%.")
-    scale_corr = float(scala_perc / 100.0)
-
-# Sezioni input
+# ------------------ INPUT PRINCIPALI ------------------
 colA, colB = st.columns(2)
 
 with colA:
@@ -323,7 +290,7 @@ with colA:
     length = st.number_input("Lunghezza (m)", 0.5, 1.0, 0.75)
     diameter = st.number_input("Diametro (mm)", 4.0, 8.0, 6.2)
     spine = st.number_input("Spine", 200, 1200, 700)
-    balance_point = st.number_input("Punto di bilanciamento (m)", 0.2, 0.8, 0.4)
+    balance_point = st.number_input("Punto bilanciamento (m)", 0.2, 0.8, 0.4)
     tip_type = st.selectbox("Tipo di punta", list(TIPO_PUNTA_CD_FACTOR.keys()))
 
     st.subheader("Arco")
@@ -336,16 +303,16 @@ with colA:
 with colB:
     st.subheader("Arciere (biometria e postura)")
     launch_height_neutral = st.number_input("Quota uscita freccia neutra (m)", 0.8, 2.2, 1.5)
-    anchor_length = st.number_input("Lunghezza spalla–aggancio (m)", 0.4, 1.0, 0.75)
+    anchor_length = st.number_input("Lunghezza spalla-punto aggancio (m)", 0.4, 1.0, 0.75)
     pelvis_height = st.number_input("Quota bacino (m)", 0.3, 1.5, 1.0)
     eye_offset_v = st.number_input("Offset verticale occhio (m)", 0.01, 0.25, 0.09)
     posture = st.selectbox("Postura", ["in piedi", "inginocchiato"])
 
     st.subheader("Bersaglio")
-    target_distance = st.number_input("Distanza bersaglio (m)", 1.0, 150.0, 40.0)
+    target_distance = st.number_input("Distanza bersaglio (m)", 1.0, 150.0, 50.0)
     target_height = st.number_input("Quota bersaglio (m)", -2.0, 3.0, 1.5)
 
-    st.subheader("Opzioni")
+    st.subheader("Opzioni balistiche")
     use_measured_v0 = st.checkbox("Usa v₀ misurata")
     v0 = st.number_input("v₀ misurata (m/s)", 5.0, 120.0, 55.0, disabled=not use_measured_v0)
     show_mira = st.checkbox("Mostra linea di mira", value=True)
@@ -358,9 +325,7 @@ with colG1:
 with colG2:
     t_cock_riser = st.number_input("Distanza cocca–riser c–r (m)", 0.2, 1.5, 0.70, step=0.01)
 
-# ==============================
-#            CALCOLO
-# ==============================
+# ------------------ CALCOLO ------------------
 if st.button("Calcola e genera mirino"):
     params = {
         'mass': mass, 'length': length, 'spine': spine, 'diameter': diameter,
@@ -373,33 +338,33 @@ if st.button("Calcola e genera mirino"):
         'use_measured_v0': use_measured_v0, 'v0': v0 if use_measured_v0 else 0.0
     }
 
-    # Se non v0 misurata: opzionale preset efficienza per tipo arco (se l'utente non ha già messo la sua)
-    # (puoi rimuovere questo blocco se preferisci usare sempre 'efficiency' inserita)
+    # Se non v0 misurata: preset efficienza per tipo arco SOLO se l’utente non ha messo un valore diverso
     if not use_measured_v0 and abs(efficiency - 0.82) < 1e-6:
         params['efficiency'] = BOW_TYPE_DEFAULT_EFF.get(bow_type, efficiency)
 
-    # 1) Iterazione postura -> angolo
+    # --- Iterazione postura -> angolo ---
     ang_opt, y_launch = trova_angolo_convergenza(params)
     params['launch_height'] = y_launch
 
-    # 2) Angolo di mira (punta->bersaglio) e scarto
+    # Angolo di mira e scarto
     dx = target_distance
     dy = target_height - y_launch
     ang_mira = np.degrees(np.arctan2(dy, dx))
     rel_angle = ang_opt - ang_mira
 
-    # 3) Traiettoria
+    # Traiettoria (per mostrare grafico completo)
     X1, Y1, v0_calc, t1 = simulate_trajectory(ang_opt, params, include_drag=True)
     if show_compare:
         X2, Y2, _, _ = simulate_trajectory(ang_opt, params, include_drag=False)
     else:
         X2, Y2 = None, None
 
-    st.markdown("### Traiettoria")
+    # ---- Grafico 1: traiettoria
+    st.markdown("### Traiettoria della freccia")
     fig_traj = plot_trajectory(X1, Y1, X2, Y2, params=params, angle=ang_opt, v0=v0_calc, tflight=t1, show_mira=show_mira)
     st.pyplot(fig_traj, use_container_width=True)
 
-    # 4) Curva drop vs distanza (usando SEMPRE l'angolo ottimale)
+    # ---- Curva drop vs distanza (usando SEMPRE l'angolo ottimale trovato)
     st.markdown("### Curva del drop vs distanza")
     distanze = np.arange(d_min, d_max + 1, d_step)
     drops_cm = []
@@ -407,14 +372,15 @@ if st.button("Calcola e genera mirino"):
     for d in distanze:
         if d <= X1.max():
             y_freccia = get_y_at_x(X1, Y1, d)
-            y_mira_lancio = y_launch + np.tan(np.radians(ang_opt)) * d
-            drop_m = (y_mira_lancio - y_freccia)
+            y_mira = y_launch + np.tan(np.radians(ang_opt)) * d
+            drop_m = (y_mira - y_freccia)
             drops_m.append(drop_m)
             drops_cm.append(drop_m * 100.0)
         else:
             drops_m.append(None)
             drops_cm.append(None)
 
+    # fit spline (se sufficiente numero di punti)
     valid_x = np.array([d for d, dr in zip(distanze, drops_cm) if dr is not None])
     valid_y = np.array([dr for dr in drops_cm if dr is not None])
 
@@ -422,12 +388,14 @@ if st.button("Calcola e genera mirino"):
     if len(valid_x) > 3:
         spline = UnivariateSpline(valid_x, valid_y, s=0)
 
+    # fit polinomiale
     poly = None
     poly_coeffs = None
     if len(valid_x) >= (fit_degree + 1):
         poly_coeffs = np.polyfit(valid_x, valid_y, deg=fit_degree)
         poly = np.poly1d(poly_coeffs)
 
+    # Plot drop + fit
     fig_drop, axd = plt.subplots()
     axd.plot(distanze, drops_cm, "o", label="Simulazione")
     if spline is not None:
@@ -444,7 +412,7 @@ if st.button("Calcola e genera mirino"):
     axd.legend()
     st.pyplot(fig_drop, use_container_width=True)
 
-    # 5) Query drop(x)
+    # Query drop(x) alla distanza d_query
     if spline is not None:
         dq = float(np.clip(d_query, valid_x.min(), valid_x.max()))
         drop_q_spline = float(spline(dq))
@@ -453,6 +421,7 @@ if st.button("Calcola e genera mirino"):
         drop_q_poly = float(poly(d_query))
         st.info(f"**drop_poly (grado {fit_degree})({d_query:.1f} m) ≈ {drop_q_poly:.1f} cm**")
 
+    # Stampa formula polinomiale leggibile
     if poly is not None:
         terms = []
         deg = len(poly_coeffs) - 1
@@ -466,14 +435,17 @@ if st.button("Calcola e genera mirino"):
                 terms.append(f"{c:+.6f}·x^{p}")
         st.code("drop(x) [cm] ≈ " + " ".join(terms), language="text")
 
-    # 6) Proiezione sul riser (tabella + grafico semplice a tacche)
+    # ---- Proiezione sul riser: genera il "mirino"
     st.markdown("### Proiezione sul riser (mirino)")
+
+    # preferisco usare la spline se disponibile, altrimenti il polinomio, altrimenti i punti raw (interp lineare)
     def drop_cm_at(x):
         if spline is not None and valid_x.min() <= x <= valid_x.max():
             return float(spline(x))
         elif poly is not None:
             return float(poly(x))
         else:
+            # fallback: interp lineare sui punti validi
             if len(valid_x) >= 2:
                 f = interp1d(valid_x, valid_y, kind='linear', fill_value='extrapolate')
                 return float(f(x))
@@ -484,61 +456,61 @@ if st.button("Calcola e genera mirino"):
         if len(valid_x) and (d < valid_x.min() or d > valid_x.max()):
             proj_rows.append((d, np.nan, np.nan))
             continue
-        drop_cm_val = drop_cm_at(d)
+        drop_cm_val = drop_cm_at(d)  # cm
         drop_m_val = drop_cm_val / 100.0 if drop_cm_val is not None and not np.isnan(drop_cm_val) else np.nan
-        yproj = y_cm(d, o_eye_cock, t_cock_riser, d=drop_m_val if not np.isnan(drop_m_val) else 0.0)
+        yproj = y_cm(d, o_eye_cock, t_cock_riser, d=drop_m_val if not np.isnan(drop_m_val) else 0.0)  # cm
         proj_rows.append((d, drop_cm_val, yproj))
 
     df_proj = pd.DataFrame(proj_rows, columns=["Distanza (m)", "Drop (cm)", "Proiezione riser (cm)"])
     st.dataframe(df_proj, use_container_width=True)
 
-    # 7) CSV
+    # Scarica CSV
     csv_buf = io.StringIO()
     df_proj.to_csv(csv_buf, index=False)
     st.download_button("⬇️ Scarica mirino (CSV)", data=csv_buf.getvalue(),
                        file_name="mirino_riser.csv", mime="text/csv")
 
-    # 8) PDF 1:1 (con linea base, marcatore, barre 5 cm)
-    pdf_buf_name = esporta_mirino_pdf_bytes(df_proj, mark_distance=float(mark_distance), scale_corr=float(scale_corr))
+    # Scarica PDF stampabile (nuovo)
+    pdf_buf_name = esporta_mirino_pdf_bytes(df_proj, o_eye_cock, t_cock_riser,
+                                        mark_distance=float(mark_distance), scale_corr=float(scale_corr))
     if pdf_buf_name is not None:
         pdf_buf, pdf_name = pdf_buf_name
         st.download_button("📄 Scarica mirino stampabile (PDF)", data=pdf_buf,
                            file_name=pdf_name, mime="application/pdf")
 
-    # 9) Grafico “scala mirino” (quick preview)
-    st.markdown("### Scala del mirino (anteprima)")
+    # ---- Grafico "mirino" come scala verticale con tacche
+    st.markdown("### Scala del mirino (tacche sul riser)")
+    # Costruisco una scala verticale: y = proiezione in cm; per estetica, sposto a x=0
     valid_proj = df_proj.dropna()
     if len(valid_proj) >= 2:
         y_marks = valid_proj["Proiezione riser (cm)"].values
         dist_marks = valid_proj["Distanza (m)"].values
-        y_minp = float(np.nanmin(y_marks))
-        y_maxp = float(np.nanmax(y_marks))
-        pad = max(2.0, 0.05 * (y_maxp - y_minp))
-        y_min_plot = y_minp - pad
-        y_max_plot = y_maxp + pad
+
+        # calcolo range con margine
+        y_min = float(np.nanmin(y_marks))
+        y_max = float(np.nanmax(y_marks))
+        pad = max(2.0, 0.05 * (y_max - y_min))
+        y_min_plot = y_min - pad
+        y_max_plot = y_max + pad
 
         fig_m, axm = plt.subplots(figsize=(3, 8))
-        axm.vlines(0, y_min_plot, y_max_plot, colors="black", linewidth=2)
-        axm.hlines(y_marks, xmin=-0.5, xmax=0.5, colors="tab:blue")
+        axm.vlines(0, y_min_plot, y_max_plot, colors="black", linewidth=2)  # "riser"
+        axm.hlines(y_marks, xmin=-0.5, xmax=0.5, colors="tab:blue")          # tacche
         for yv, dv in zip(y_marks, dist_marks):
             axm.text(0.55, yv, f"{int(dv)} m", va="center", fontsize=9)
-
-        # linea base y=0
-        axm.hlines(0, xmin=-0.5, xmax=0.5, colors="red", linestyles="--")
-        axm.text(0.55, 0, "y=0 cm", va="center", fontsize=8, color="red")
 
         axm.set_ylim(y_min_plot, y_max_plot)
         axm.set_xlim(-1.0, 3.0)
         axm.set_yticks(np.linspace(round(y_min_plot), round(y_max_plot), 9))
         axm.set_xticks([])
-        axm.set_title("Mirino – proiezione tacche (cm)")
-        axm.set_ylabel("Quota (cm) sulla colonna del riser")
+        axm.set_title("Mirino – proiezione tacche sul riser (cm)")
+        axm.set_ylabel("Quota (cm) sulla colonna del riser)")
         axm.grid(True, axis='y', linestyle='--', alpha=0.3)
         st.pyplot(fig_m, use_container_width=False)
     else:
-        st.warning("Non ci sono abbastanza punti per disegnare l’anteprima della scala del mirino.")
+        st.warning("Non ci sono abbastanza punti per disegnare la scala del mirino.")
 
-    # 10) Riepilogo
+    # ---- Riepilogo risultati principali
     st.success(
         f"**Angolo ottimale (orizzontale):** {ang_opt:.2f}°\n"
         f"**Angolo di mira (punta→bersaglio):** {ang_mira:.2f}°\n"
