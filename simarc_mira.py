@@ -280,6 +280,7 @@ with st.sidebar:
     d_step = st.number_input("Passo (m)", 1, 10, 5)
     fit_degree = st.slider("Grado polinomio per drop(x)", 1, 5, 2)
     d_query = st.number_input("Distanza per query drop(x) (m)", 5, 100, 30)
+    mark_distance = st.number_input("Distanza laser (m)", 10, 100, 30)
 
 # ------------------ INPUT PRINCIPALI ------------------
 colA, colB = st.columns(2)
@@ -519,3 +520,4 @@ if st.button("Calcola e genera mirino"):
         f"**v₀:** {v0_calc:.2f} m/s\n"
         f"**Tempo volo:** {t1:.2f} s"
     )
+
