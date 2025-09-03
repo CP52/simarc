@@ -281,7 +281,7 @@ def esporta_mirino_pdf_bytes(df_proj, o_eye_cock, t_cock_riser, filename="mirino
 
     # Punto Laser @30 m
     y_laser_pt = y0_pt + cm2pt(y_laser_30_cm)
-    c.setFillColorRGB(0, 0, 1)
+    c.setFillColorRGB(0, 1, 0)
     c.circle(x_center, y_laser_pt, 2.5, fill=1, stroke=0)
     c.setFillColorRGB(0, 0, 0)
     c.drawString(x_center + 30, y_laser_pt - 4, "Laser 30 m")
@@ -292,11 +292,11 @@ def esporta_mirino_pdf_bytes(df_proj, o_eye_cock, t_cock_riser, filename="mirino
     # Orizzontale
     c.line(x_center - cm2pt(2.5), y_bar, x_center + cm2pt(2.5), y_bar)
     c.setFont("Helvetica", 9)
-    c.drawCentredString(x_center, y_bar - 12, "Barra 5 cm (orizzontale)")
+    c.drawCentredString(x_center, y_bar - 12, "Test 5 cm")
     # Verticale
     x_bar = x_center + 80
     c.line(x_bar, y_bar, x_bar, y_bar + cm2pt(5.0))
-    c.drawCentredString(x_bar, y_bar - 12, "Barra 5 cm (verticale)")
+    c.drawCentredString(x_bar, y_bar + 12, "              Test 5 cm")
 
     c.showPage()
     c.save()
@@ -538,3 +538,4 @@ if st.button("Calcola e genera mirino"):
         f"**v₀:** {v0_calc:.2f} m/s\n"
         f"**Tempo volo:** {t1:.2f} s"
     )
+
