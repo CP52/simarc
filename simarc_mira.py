@@ -473,7 +473,7 @@ if st.button("Calcola e genera mirino"):
 
     # Scarica PDF stampabile (nuovo)
     pdf_buf_name = esporta_mirino_pdf_bytes(df_proj, o_eye_cock, t_cock_riser,
-                                        mark_distance=float(mark_distance), scale_corr=float(scale_corr))
+                                        mark_distance=float(mark_distance))
     if pdf_buf_name is not None:
         pdf_buf, pdf_name = pdf_buf_name
         st.download_button("📄 Scarica mirino stampabile (PDF)", data=pdf_buf,
@@ -520,5 +520,6 @@ if st.button("Calcola e genera mirino"):
         f"**v₀:** {v0_calc:.2f} m/s\n"
         f"**Tempo volo:** {t1:.2f} s"
     )
+
 
 
