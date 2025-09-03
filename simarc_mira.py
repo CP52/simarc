@@ -237,6 +237,8 @@ def esporta_mirino_pdf_bytes(df_proj, o_eye_cock, t_cock_riser, filename="mirino
       - tacca aggiuntiva a y=0 cm,
       - punto Laser @30 m,
       - barre di controllo 5 cm.
+      - etichette alternate dx/sx per evitare sovrapposizioni,
+      - margine dal fondo: 5 cm.
     """
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
@@ -257,19 +259,26 @@ def esporta_mirino_pdf_bytes(df_proj, o_eye_cock, t_cock_riser, filename="mirino
     y_min, y_max = float(min(y_vals)), float(max(y_vals))
 
     x_center = width / 2.0
-    margin_bottom = 50  # pt
+    margin_bottom = cm2pt(5.0)  # 5 cm dal fondo
     y0_pt = margin_bottom - cm2pt(y_min)
 
     # Colonna verticale riser
     c.setLineWidth(2)
     c.line(x_center, y0_pt + cm2pt(y_min), x_center, y0_pt + cm2pt(y_max))
 
-    # Tacche normali da df_proj
+    # Tacche normali da df_proj con etichette alternate
     c.setFont("Helvetica", 8)
-    for _, row in df_proj.dropna().iterrows():
+    for i, (_, row) in enumerate(df_proj.dropna().iterrows()):
         y_pt = y0_pt + cm2pt(float(row["Proiezione riser (cm)"]))
         c.line(x_center - 20, y_pt, x_center + 20, y_pt)
-        c.drawString(x_center + 30, y_pt - 3, f"{int(row['Distanza (m)'])} m")
+        if i % 2 == 0:
+            # etichetta a destra
+            c.drawString(x_center + 30, y_pt - 3, f"{int(row['Distanza (m)'])} m")
+        else:
+            # etichetta a sinistra
+            text = f"{int(row['Distanza (m)'])} m"
+            tw = c.stringWidth(text, "Helvetica", 8)
+            c.drawString(x_center - 30 - tw, y_pt - 3, text)
 
     # Tacca a y=0 cm
     y_zero_pt = y0_pt + cm2pt(0.0)
@@ -296,7 +305,7 @@ def esporta_mirino_pdf_bytes(df_proj, o_eye_cock, t_cock_riser, filename="mirino
     # Verticale
     x_bar = x_center + 80
     c.line(x_bar, y_bar, x_bar, y_bar + cm2pt(5.0))
-    c.drawCentredString(x_bar, y_bar + 12, "                 Vert. 5 cm")
+    c.drawCentredString(x_bar, y_bar + 12, "Vert. 5 cm")
 
     c.showPage()
     c.save()
@@ -538,6 +547,3 @@ if st.button("Calcola e genera mirino"):
         f"**v₀:** {v0_calc:.2f} m/s\n"
         f"**Tempo volo:** {t1:.2f} s"
     )
-
-
-
