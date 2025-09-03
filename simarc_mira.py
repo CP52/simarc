@@ -296,7 +296,7 @@ def esporta_mirino_pdf_bytes(df_proj, o_eye_cock, t_cock_riser, filename="mirino
     # Verticale
     x_bar = x_center + 80
     c.line(x_bar, y_bar, x_bar, y_bar + cm2pt(5.0))
-    c.drawCentredString(x_bar, y_bar + 12, "               Vert. 5 cm")
+    c.drawCentredString(x_bar, y_bar + 12, "                 Vert. 5 cm")
 
     c.showPage()
     c.save()
@@ -538,5 +538,6 @@ if st.button("Calcola e genera mirino"):
         f"**v₀:** {v0_calc:.2f} m/s\n"
         f"**Tempo volo:** {t1:.2f} s"
     )
+
 
 
