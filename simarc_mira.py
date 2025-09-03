@@ -207,7 +207,7 @@ def y_cm(x, o, t, d=0.0):
 #        PDF DEL MIRINO
 # ==============================
 def esporta_mirino_pdf_bytes(df_proj, o_eye_cock, t_cock_riser,
-                             mark_distance=30.0, scale_corr=1.0,
+                             mark_distance=30.0,
                              filename="mirino_riser.pdf"):
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
@@ -520,4 +520,5 @@ if st.button("Calcola e genera mirino"):
         f"**v₀:** {v0_calc:.2f} m/s\n"
         f"**Tempo volo:** {t1:.2f} s"
     )
+
 
