@@ -356,7 +356,7 @@ with colB:
 
     st.subheader("Bersaglio")
     target_distance = st.number_input("Distanza bersaglio (m)", 1.0, 150.0, 50.0)
-    target_height = st.number_input("Quota bersaglio (m)", -2.0, 20.0, 1.5)
+    target_height = st.number_input("Quota bersaglio (m)", -20.0, 20.0, 1.5)
 
     st.subheader("Opzioni")
     use_measured_v0 = st.checkbox("Usa v₀ misurata")
@@ -547,5 +547,6 @@ if st.button("Calcola e genera mirino"):
         f"**v₀:** {v0_calc:.2f} m/s\n"
         f"**Tempo volo:** {t1:.2f} s"
     )
+
 
 
