@@ -11,7 +11,7 @@ st.title("Proiezione sul riser del punto di impatto")
 st.image("mira.png", caption="Schema: occhio, cocca, riser e proiezione sul riser", use_container_width=True)
 
 # Parametri
-o = st.number_input("Distanza occhio–cocca o-c (m)", min_value=0.01, max_value=1.0, value=0.11, step=0.01)
+o = st.number_input("Distanza occhio–cocca o-c (m)", min_value=0.01, max_value=1.0, value=0.10, step=0.05)
 t = st.number_input("Distanza cocca–riser c-r (m)", min_value=0.01, max_value=2.0, value=0.70, step=0.01)
 d = st.number_input("Drop (m)", min_value=0.0, max_value=10.0, value=0.0, step=0.1)
 x_drop = st.number_input("Distanza bersaglio (m)", min_value=0.0, max_value=50.0, value=20.0, step=1.0)
@@ -60,5 +60,6 @@ df.index = [''] * len(df)
 
 st.subheader("Tabella valori (tiro teso, d=0)")
 st.dataframe(df, use_container_width=True)
+
 
 
