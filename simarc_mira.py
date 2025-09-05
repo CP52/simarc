@@ -355,8 +355,8 @@ with colB:
     eye_offset_v = st.number_input("Offset verticale occhio (m)", 0.01, 0.25, 0.09)
 
     st.subheader("Bersaglio")
-    target_distance = st.number_input("Distanza bersaglio (m)", 1.0, 150.0, 40.0)
-    target_height = st.number_input("Quota bersaglio (m)", -2.0, 3.0, 1.5)
+    target_distance = st.number_input("Distanza bersaglio (m)", 1.0, 150.0, 50.0)
+    target_height = st.number_input("Quota bersaglio (m)", -2.0, 20.0, 1.5)
 
     st.subheader("Opzioni")
     use_measured_v0 = st.checkbox("Usa v₀ misurata")
@@ -367,7 +367,7 @@ with colB:
 st.subheader("Geometria visiva mirino (riser)")
 colG1, colG2 = st.columns(2)
 with colG1:
-    o_eye_cock = st.number_input("Distanza occhio–cocca o–c (m)", 0.05, 0.40, 0.11, step=0.01)
+    o_eye_cock = st.number_input("Distanza occhio–cocca o–c (m)", 0.05, 0.40, 0.11, step=0.005,format="%.3f)
 with colG2:
     t_cock_riser = st.number_input("Distanza cocca–riser c–r (m)", 0.2, 1.5, 0.70, step=0.01)
 
@@ -547,3 +547,4 @@ if st.button("Calcola e genera mirino"):
         f"**v₀:** {v0_calc:.2f} m/s\n"
         f"**Tempo volo:** {t1:.2f} s"
     )
+
