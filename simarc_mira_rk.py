@@ -11,7 +11,7 @@ import pandas as pd
 import math
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Optional, Tuple, List, Dict
 
 # ==============================
@@ -38,6 +38,11 @@ class SimulationParams:
     target_height: float
     use_measured_v0: bool
     v0: float
+    launch_height: float = None
+
+    def __post_init__(self):
+        if self.launch_height is None:
+            self.launch_height = self.launch_height_neutral
 
 G = 9.81
 air_density = 1.204
@@ -135,7 +140,6 @@ class RK4AdaptiveIntegrator:
         v0 = calculate_velocity(params)
         end_x = float(end_x if end_x is not None else params.target_distance)
         
-        # Stato iniziale: [x, y, vx, vy]
         state = np.array([0.0, params.launch_height, 
                          v0 * np.cos(angle), v0 * np.sin(angle)])
         
@@ -146,18 +150,14 @@ class RK4AdaptiveIntegrator:
         self.stats = {'steps': 0, 'rejections': 0, 'min_dt_used': float('inf')}
         
         while state[0] <= end_x and state[1] >= -10 and t < 10.0:
-            # Tentativo di passo
             state_full = self.rk4_step(t, state, dt, params, angle_deg, include_drag)
             
-            # Due mezzi passi per stima errore
             state_half1 = self.rk4_step(t, state, dt/2, params, angle_deg, include_drag)
             state_half2 = self.rk4_step(t + dt/2, state_half1, dt/2, params, angle_deg, include_drag)
             
-            # Stima errore (relativo)
             error = np.linalg.norm(state_full - state_half2) / (np.linalg.norm(state) + 1e-12)
             
             if error < self.tol or dt <= self.min_dt:
-                # Accetta il passo
                 state = state_full
                 t += dt
                 X.append(state[0])
@@ -166,17 +166,14 @@ class RK4AdaptiveIntegrator:
                 self.stats['steps'] += 1
                 self.stats['min_dt_used'] = min(self.stats['min_dt_used'], dt)
                 
-                # Adatta il passo
                 if error > 0:
                     dt = min(self.max_dt, 0.9 * dt * (self.tol/error)**0.2)
                 else:
                     dt = min(self.max_dt, dt * 1.2)
             else:
-                # Rifiuta il passo, riduci dt
                 dt = max(self.min_dt, 0.9 * dt * (self.tol/error)**0.2)
                 self.stats['rejections'] += 1
             
-            # Condizioni di terminazione
             if state[0] > end_x + 5 or state[1] < -5:
                 break
         
@@ -223,9 +220,7 @@ def trova_angolo_convergenza(params: SimulationParams, integrator: RK4AdaptiveIn
     angolo = 0.0
     
     for i in range(max_iter):
-        modified_params = SimulationParams(
-            **{**params.__dict__, 'launch_height': quota_uscita}
-        )
+        modified_params = replace(params, launch_height=quota_uscita)
         
         angolo_nuovo = find_optimal_angle(modified_params, integrator)
         y_launch_new = calcola_quota_uscita_posturale(params, np.radians(angolo_nuovo))
@@ -442,14 +437,12 @@ def main():
             launch_height_neutral=launch_height_neutral, anchor_length=anchor_length,
             pelvis_height=pelvis_height, eye_offset_v=eye_offset_v,
             target_distance=target_distance, target_height=target_height,
-            use_measured_v0=use_measured_v0, v0=v0,
-            # launch_height=launch_height_neutral  # Valore iniziale
+            use_measured_v0=use_measured_v0, v0=v0
         )
 
         if not use_measured_v0 and abs(efficiency - 0.82) < 1e-6:
             params.efficiency = BOW_TYPE_DEFAULT_EFF.get(bow_type, efficiency)
 
-        # Inizializza integratore RK4
         integrator = RK4AdaptiveIntegrator(tol=tol, max_dt=max_dt, min_dt=min_dt)
         
         with st.spinner("🔍 Calcolo angolo ottimale..."):
@@ -465,19 +458,15 @@ def main():
             else:
                 X2, Y2 = None, None
 
-        # Visualizzazione risultati
         st.markdown("### 📊 Traiettoria")
         fig_traj = plot_trajectory(X1, Y1, params, ang_opt, v0_calc, t1, X2, Y2, show_mira)
         st.pyplot(fig_traj, use_container_width=True)
         
-        # Statistiche integratore
         st.sidebar.info(f"**Statistiche RK4:**\n"
                        f"Passi accettati: {integrator.stats['steps']}\n"
                        f"Passi rifiutati: {integrator.stats['rejections']}\n"
                        f"Passo minimo: {integrator.stats['min_dt_used']:.2e} s")
 
-        # [Resto del codice per drop curve, mirino, PDF... identico alla versione originale]
-        # 4) Curva drop vs distanza (usando SEMPRE l'angolo ottimale trovato)
         st.markdown("### Curva del drop vs distanza")
         distanze = np.arange(d_min, d_max + 1, d_step)
         drops_cm, drops_m = [], []
@@ -513,7 +502,6 @@ def main():
         axd.grid(True); axd.legend()
         st.pyplot(fig_drop, use_container_width=True)
 
-        # 5) Query drop(x)
         if spline is not None:
             dq = float(np.clip(d_query, valid_x.min(), valid_x.max()))
             st.info(f"**drop_spline({dq:.1f} m) ≈ {float(spline(dq)):.1f} cm**")
@@ -533,7 +521,6 @@ def main():
                     terms.append(f"{c:+.6f}·x^{p}")
             st.code("drop(x) [cm] ≈ " + " ".join(terms), language="text")
 
-        # 6) Proiezione sul riser
         st.markdown("### Proiezione sul riser (mirino)")
         def drop_cm_at(x):
             if spline is not None and valid_x.min() <= x <= valid_x.max():
@@ -556,20 +543,15 @@ def main():
         df_proj = pd.DataFrame(proj_rows, columns=["Distanza (m)", "Drop (cm)", "Proiezione riser (cm)"])
         st.dataframe(df_proj, use_container_width=True)
 
-        # 7) CSV
         csv_buf = io.StringIO()
         df_proj.to_csv(csv_buf, index=False)
         st.download_button("⬇️ Scarica mirino (CSV)", data=csv_buf.getvalue(),
                            file_name="mirino_riser.csv", mime="text/csv")
 
-        # 8) PDF A4 1:1
-        pdf_buf_name = esporta_mirino_pdf_bytes(df_proj, o_eye_cock, t_cock_riser)
-        if pdf_buf_name is not None:
-            pdf_buf, pdf_name = pdf_buf_name
-            st.download_button("📄 Scarica mirino stampabile (PDF)", data=pdf_buf,
-                               file_name=pdf_name, mime="application/pdf")
+        pdf_buf, pdf_name = esporta_mirino_pdf_bytes(df_proj, o_eye_cock, t_cock_riser)
+        st.download_button("📄 Scarica mirino stampabile (PDF)", data=pdf_buf,
+                           file_name=pdf_name, mime="application/pdf")
 
-        # 9) Anteprima "scala mirino" (solo tacche + Laser 30 m; nessuna y=0 qui)
         st.markdown("### Scala del mirino – anteprima")
         valid_proj = df_proj.dropna()
         if len(valid_proj) >= 2:
@@ -582,12 +564,11 @@ def main():
             y_max_plot = y_maxp + pad
 
             fig_m, axm = plt.subplots(figsize=(3, 8))
-            axm.vlines(0, y_min_plot, y_max_plot, colors="black", linewidth=2)  # "riser"
-            axm.hlines(y_marks, xmin=-0.5, xmax=0.5, colors="tab:blue")         # tacche
+            axm.vlines(0, y_min_plot, y_max_plot, colors="black", linewidth=2)
+            axm.hlines(y_marks, xmin=-0.5, xmax=0.5, colors="tab:blue")
             for yv, dv in zip(y_marks, dist_marks):
                 axm.text(0.6, yv, f"{int(dv)} m", va="center", fontsize=8)
 
-            # Punto Laser 30 m (d=0)
             y_laser_30 = y_cm(30.0, o_eye_cock, t_cock_riser, d=0.0)
             axm.scatter(0, y_laser_30, color="blue", zorder=5)
             axm.text(0.6, y_laser_30, "Laser 30 m", va="center", fontsize=8, color="blue")
@@ -603,7 +584,6 @@ def main():
         else:
             st.warning("Pochi punti validi per l'anteprima della scala del mirino.")
 
-        # 10) Riepilogo
         dx = target_distance
         dy = target_height - y_launch
         ang_mira = np.degrees(np.arctan2(dy, dx))
@@ -616,7 +596,6 @@ def main():
             f"**v₀:** {v0_calc:.2f} m/s\n"
             f"**Tempo volo:** {t1:.2f} s"
         )
+
 if __name__ == "__main__":
     main()
-
-
