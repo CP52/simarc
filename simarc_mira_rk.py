@@ -258,10 +258,15 @@ def plot_trajectory(X1: np.ndarray, Y1: np.ndarray, params: SimulationParams,
     y0 = params.launch_height
     th = np.radians(angle)
     
+    # Calcola il punto finale della linea di mira
     if show_mira:
         x_mira = np.array([0.0, params.target_distance])
         y_mira = y0 + np.tan(th) * x_mira
         ax.plot(x_mira, y_mira, 'k--', label="Linea di mira", alpha=0.7)
+        
+        # Calcola anche l'estensione completa della linea di mira per la scala
+        x_mira_full = np.array([0.0, max(X1.max(), params.target_distance) + 2])
+        y_mira_full = y0 + np.tan(th) * x_mira_full
 
     y_freccia = get_y_at_x(X1, Y1, params.target_distance)
     y_mira_finale = y0 + np.tan(th) * params.target_distance
@@ -292,10 +297,28 @@ def plot_trajectory(X1: np.ndarray, Y1: np.ndarray, params: SimulationParams,
     ax.grid(True, alpha=0.3)
     ax.legend()
     
-    xmax = max(params.target_distance, X1.max(), 
+    # Calcolo ottimale dei limiti degli assi
+    xmax = max(X1.max(), params.target_distance, 
               (X2.max() if X2 is not None else 0.0)) + 2
-    ymin = min(Y1.min(), params.target_height, 0) - 0.5
-    ymax = max(Y1.max(), params.target_height) + 0.5
+    
+    # Calcola ymin e ymax considerando TUTTI gli elementi
+    y_values = [Y1.min(), params.target_height, 0]
+    y_max_values = [Y1.max(), params.target_height]
+    
+    if show_mira:
+        # Aggiungi i valori della linea di mira completa
+        y_values.extend([y_mira_full.min(), y_mira_full.min() - 0.5])
+        y_max_values.extend([y_mira_full.max(), y_mira_full.max() + 0.5])
+    
+    if X2 is not None and Y2 is not None:
+        y_values.append(Y2.min())
+        y_max_values.append(Y2.max())
+    
+    ymin = min(y_values) - 0.5
+    ymax = max(y_max_values) + 0.5
+    
+    # Assicurati che ymin non sia troppo basso (almeno -1.0)
+    ymin = max(ymin, -1.0)
     
     ax.set_xlim(0, xmax)
     ax.set_ylim(ymin, ymax)
