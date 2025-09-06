@@ -443,7 +443,7 @@ def main():
             pelvis_height=pelvis_height, eye_offset_v=eye_offset_v,
             target_distance=target_distance, target_height=target_height,
             use_measured_v0=use_measured_v0, v0=v0,
-            launch_height=launch_height_neutral  # Valore iniziale
+            # launch_height=launch_height_neutral  # Valore iniziale
         )
 
         if not use_measured_v0 and abs(efficiency - 0.82) < 1e-6:
@@ -618,4 +618,5 @@ def main():
         )
 if __name__ == "__main__":
     main()
+
 
