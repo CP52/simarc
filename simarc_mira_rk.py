@@ -616,5 +616,3 @@ def main():
             f"**v₀:** {v0_calc:.2f} m/s\n"
             f"**Tempo volo:** {t1:.2f} s"
         )
-if __name__ == "__main__":
-    main()
