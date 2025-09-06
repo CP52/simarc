@@ -617,4 +617,5 @@ def main():
             f"**Tempo volo:** {t1:.2f} s"
         )
 if __name__ == "__main__":
-main()
+    main()
+
