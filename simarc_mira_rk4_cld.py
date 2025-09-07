@@ -521,15 +521,20 @@ def create_enhanced_trajectory_plot(result_with_drag: TrajectoryResults,
             f"Altezza max: {result_with_drag.max_height:.1f} m")
     ax1.set_title(title, fontsize=13, pad=20)
     
-    # Limiti assi ottimizzati
-    x_margin = max(2, params.target_distance * 0.05)
-    y_values = [Y1.min(), Y1.max(), params.target_height, y0]
-    if result_no_drag:
-        y_values.extend([result_no_drag.Y.min(), result_no_drag.Y.max()])
-    
-    y_margin = max(0.5, (max(y_values) - min(y_values)) * 0.1)
-    ax1.set_xlim(-x_margin, max(X1.max(), params.target_distance) + x_margin)
-    ax1.set_ylim(min(y_values) - y_margin, max(y_values) + y_margin)
+	# Limiti assi ottimizzati
+	x_margin = max(2, params.target_distance * 0.05)
+	x_max = max(X1.max(), params.target_distance) + x_margin
+
+	# Calcola punto finale della linea di mira
+	y_sight_end = y0 + np.tan(th) * x_max
+	y_values = [Y1.min(), Y1.max(), params.target_height, y0, y_sight_end]
+
+	if result_no_drag:
+		y_values.extend([result_no_drag.Y.min(), result_no_drag.Y.max()])
+
+	y_margin = max(0.5, (max(y_values) - min(y_values)) * 0.1)
+	ax1.set_xlim(-x_margin, x_max)
+	ax1.set_ylim(min(y_values) - y_margin, max(y_values) + y_margin)
     
     # === GRAFICO VELOCITÀ ===
     V_total = np.sqrt(result_with_drag.V_x**2 + result_with_drag.V_y**2)
@@ -719,7 +724,13 @@ def export_complete_analysis(trajectory_result: TrajectoryResults,
     
     output = io.BytesIO()
     
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+    try:
+		import openpyxl
+		excel_engine = 'openpyxl'
+	except ImportError:
+		excel_engine = 'xlsxwriter'
+
+	with pd.ExcelWriter(output, engine=excel_engine) as writer:
         # Scheda 1: Parametri simulazione
         params_data = {
             'Parametro': [
@@ -1202,11 +1213,14 @@ def main():
             
             with export_cols[1]:
                 # Excel completo
-                excel_data = export_complete_analysis(main_result, params, df_mirino, monte_carlo_stats)
-                st.download_button("📈 Download Analisi Excel", 
-                                 data=excel_data,
-                                 file_name=f"analisi_completa_{target_distance}m.xlsx",
-                                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                try:
+					excel_data = export_complete_analysis(main_result, params, df_mirino, monte_carlo_stats)
+					st.download_button("📈 Download Analisi Excel", 
+									data=excel_data,
+									file_name=f"analisi_completa_{target_distance}m.xlsx",
+									mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+				except ImportError as e:
+					st.warning("Moduli Excel non disponibili. Installare openpyxl o xlsxwriter per abilitare l'export Excel.")
             
             with export_cols[2]:
                 # PDF mirino (mantenuto dalla versione originale)
