@@ -723,7 +723,7 @@ def export_complete_analysis(trajectory_result: TrajectoryResults,
                            params: SimulationParams,
                            drop_data: pd.DataFrame,
                            monte_carlo_stats: Optional[Dict] = None) -> io.BytesIO:
-    """Export completo in Excel con multiple schede"""
+    """Export completo in Excel con multiple schede - versione corretta"""
     
     output = io.BytesIO()
     
@@ -731,78 +731,113 @@ def export_complete_analysis(trajectory_result: TrajectoryResults,
         import openpyxl
         excel_engine = 'openpyxl'
     except ImportError:
-        excel_engine = 'xlsxwriter'
-
-    with pd.ExcelWriter(output, engine=excel_engine) as writer:
-        # Scheda 1: Parametri simulazione
-        params_data = {
-            'Parametro': [
-                'Peso freccia (g)', 'Lunghezza (m)', 'Diametro (mm)', 
-                'Tipo punta', 'Forza arco (lb)', 'Allungo (m)', 
-                'Efficienza', 'Tipo arco', 'Quota uscita (m)',
-                'Distanza bersaglio (m)', 'Quota bersaglio (m)',
-                'Velocità vento (m/s)', 'Direzione vento (°)',
-                'Temperatura (°C)', 'Pressione (hPa)', 'Umidità (%)'
-            ],
-            'Valore': [
-                params.mass, params.length, params.diameter,
-                params.tip_type, params.draw_force, params.draw_length,
-                params.efficiency, params.bow_type, params.launch_height,
-                params.target_distance, params.target_height,
-                params.wind_speed, params.wind_direction,
-                params.air_temperature, params.air_pressure, params.humidity
-            ]
-        }
-        pd.DataFrame(params_data).to_excel(writer, sheet_name='Parametri', index=False)
-        
-        # Scheda 2: Traiettoria completa
-        traj_data = pd.DataFrame({
-            'Distanza (m)': trajectory_result.X,
-            'Altezza (m)': trajectory_result.Y,
-            'Velocità X (m/s)': trajectory_result.V_x,
-            'Velocità Y (m/s)': trajectory_result.V_y,
-            'Velocità totale (m/s)': np.sqrt(trajectory_result.V_x**2 + trajectory_result.V_y**2),
-            'Tempo (s)': trajectory_result.times
-        })
-        traj_data.to_excel(writer, sheet_name='Traiettoria', index=False)
-        
-        # Scheda 3: Dati drop
-        drop_data.to_excel(writer, sheet_name='Drop Analysis', index=False)
-        
-        # Scheda 4: Risultati principali
-        main_results = pd.DataFrame({
-            'Metrica': [
-                'Angolo ottimale (°)', 'Velocità iniziale (m/s)', 
-                'Tempo di volo (s)', 'Altezza massima (m)',
-                'Gittata (m)', 'Drop al bersaglio (cm)'
-            ],
-            'Valore': [
-                trajectory_result.angle_degrees, trajectory_result.v0,
-                trajectory_result.flight_time, trajectory_result.max_height,
-                trajectory_result.range_distance,
-                (params.launch_height + np.tan(np.radians(trajectory_result.angle_degrees)) * params.target_distance - 
-                 get_y_at_x_improved(trajectory_result.X, trajectory_result.Y, params.target_distance)) * 100
-            ]
-        })
-        main_results.to_excel(writer, sheet_name='Risultati', index=False)
-        
-        # Scheda 5: Statistiche Monte Carlo (se disponibili)
-        if monte_carlo_stats:
-            mc_data = []
-            for metric, stats in monte_carlo_stats.items():
-                mc_data.append({
-                    'Metrica': metric,
-                    'Media': stats['mean'],
-                    'Deviazione Standard': stats['std'],
-                    'Minimo': stats['min'],
-                    'Massimo': stats['max'],
-                    'Percentile 5%': stats['percentile_5'],
-                    'Percentile 95%': stats['percentile_95']
-                })
-            pd.DataFrame(mc_data).to_excel(writer, sheet_name='Monte Carlo', index=False)
+        try:
+            import xlsxwriter
+            excel_engine = 'xlsxwriter' 
+        except ImportError:
+            raise ImportError("Nessun engine Excel disponibile. Installare openpyxl o xlsxwriter.")
     
-    output.seek(0)
-    return output
+    try:
+        with pd.ExcelWriter(output, engine=excel_engine, engine_kwargs={'options': {'nan_inf_to_errors': True}}) as writer:
+            # Scheda 1: Parametri simulazione
+            params_data = {
+                'Parametro': [
+                    'Peso freccia (g)', 'Lunghezza (m)', 'Diametro (mm)', 
+                    'Tipo punta', 'Forza arco (lb)', 'Allungo (m)', 
+                    'Efficienza', 'Tipo arco', 'Quota uscita (m)',
+                    'Distanza bersaglio (m)', 'Quota bersaglio (m)',
+                    'Velocita vento (m/s)', 'Temperatura (°C)', 
+                    'Pressione (hPa)', 'Umidita (%)'
+                ],
+                'Valore': [
+                    params.mass, params.length, params.diameter,
+                    params.tip_type, params.draw_force, params.draw_length,
+                    params.efficiency, params.bow_type, params.launch_height,
+                    params.target_distance, params.target_height,
+                    params.wind_speed, params.air_temperature, 
+                    params.air_pressure, params.humidity
+                ]
+            }
+            params_df = pd.DataFrame(params_data)
+            params_df.to_excel(writer, sheet_name='Parametri', index=False)
+            
+            # Scheda 2: Traiettoria completa (limita i dati per evitare file troppo grandi)
+            max_points = 1000
+            step = max(1, len(trajectory_result.X) // max_points)
+            
+            traj_data = pd.DataFrame({
+                'Distanza (m)': trajectory_result.X[::step],
+                'Altezza (m)': trajectory_result.Y[::step],
+                'Velocita X (m/s)': trajectory_result.V_x[::step],
+                'Velocita Y (m/s)': trajectory_result.V_y[::step],
+                'Velocita totale (m/s)': np.sqrt(trajectory_result.V_x[::step]**2 + trajectory_result.V_y[::step]**2),
+                'Tempo (s)': trajectory_result.times[::step]
+            })
+            traj_data.to_excel(writer, sheet_name='Traiettoria', index=False)
+            
+            # Scheda 3: Dati drop (pulisci i NaN)
+            drop_data_clean = drop_data.fillna('')  # Sostituisci NaN con stringhe vuote
+            drop_data_clean.to_excel(writer, sheet_name='Drop_Analysis', index=False)
+            
+            # Scheda 4: Risultati principali
+            y_impact = get_y_at_x_improved(trajectory_result.X, trajectory_result.Y, params.target_distance)
+            y_sight = params.launch_height + np.tan(np.radians(trajectory_result.angle_degrees)) * params.target_distance
+            drop_at_target = (y_sight - y_impact) * 100
+            
+            main_results = pd.DataFrame({
+                'Metrica': [
+                    'Angolo ottimale (gradi)', 'Velocita iniziale (m/s)', 
+                    'Tempo di volo (s)', 'Altezza massima (m)',
+                    'Gittata (m)', 'Drop al bersaglio (cm)'
+                ],
+                'Valore': [
+                    trajectory_result.angle_degrees, trajectory_result.v0,
+                    trajectory_result.flight_time, trajectory_result.max_height,
+                    trajectory_result.range_distance, drop_at_target
+                ]
+            })
+            main_results.to_excel(writer, sheet_name='Risultati', index=False)
+            
+            # Scheda 5: Statistiche Monte Carlo (se disponibili e valide)
+            if monte_carlo_stats and isinstance(monte_carlo_stats, dict):
+                mc_data = []
+                for metric, stats in monte_carlo_stats.items():
+                    if isinstance(stats, dict) and 'mean' in stats:
+                        mc_data.append({
+                            'Metrica': metric.replace('_', ' ').title(),
+                            'Media': round(stats.get('mean', 0), 4),
+                            'Deviazione Standard': round(stats.get('std', 0), 4),
+                            'Minimo': round(stats.get('min', 0), 4),
+                            'Massimo': round(stats.get('max', 0), 4),
+                            'Percentile 5%': round(stats.get('percentile_5', 0), 4),
+                            'Percentile 95%': round(stats.get('percentile_95', 0), 4)
+                        })
+                
+                if mc_data:  # Solo se ci sono dati validi
+                    mc_df = pd.DataFrame(mc_data)
+                    mc_df.to_excel(writer, sheet_name='Monte_Carlo', index=False)
+        
+        output.seek(0)
+        return output
+        
+    except Exception as e:
+        # Fallback: crea un file Excel semplice con solo i risultati principali
+        output = io.BytesIO()
+        
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            # Solo scheda risultati essenziali
+            summary_data = pd.DataFrame({
+                'Parametro': ['Angolo (gradi)', 'Velocita (m/s)', 'Drop (cm)'],
+                'Valore': [
+                    trajectory_result.angle_degrees, 
+                    trajectory_result.v0,
+                    drop_at_target if 'drop_at_target' in locals() else 0
+                ]
+            })
+            summary_data.to_excel(writer, sheet_name='Risultati', index=False)
+        
+        output.seek(0)
+        return output
 
 # ==============================
 # INTERFACCIA STREAMLIT MIGLIORATA
@@ -1216,7 +1251,7 @@ def main():
                                  mime="text/csv")
             
             with export_cols[1]:
-                # Excel completo
+                # Excel completo con gestione errori migliorata
                 try:
                     excel_data = export_complete_analysis(main_result, params, df_mirino, monte_carlo_stats)
                     st.download_button("📈 Download Analisi Excel", 
@@ -1224,7 +1259,15 @@ def main():
                                     file_name=f"analisi_completa_{target_distance}m.xlsx",
                                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                 except ImportError as e:
-                    st.warning("Moduli Excel non disponibili. Installare openpyxl o xlsxwriter per abilitare l'export Excel.")
+                    st.warning("⚠️ Moduli Excel non disponibili. Installare: pip install openpyxl")
+                except Exception as e:
+                    st.error(f"Errore export Excel: {str(e)}")
+                    # Offer CSV alternative
+                    csv_data = df_mirino.to_csv(index=False)
+                    st.download_button("📊 Download CSV alternativo", 
+                                     data=csv_data,
+                                     file_name=f"dati_mirino_{int(target_distance)}m.csv",
+                                     mime="text/csv")
             
             with export_cols[2]:
                 # PDF mirino (mantenuto dalla versione originale)
