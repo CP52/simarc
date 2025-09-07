@@ -87,7 +87,7 @@ class SimulationParams:
     launch_height: Optional[float] = None
     # Nuovi parametri ambientali
     wind_speed: float = 0.0
-    wind_direction: float = 0.0  # gradi, 0 = vento frontale
+    #wind_direction: float = 0.0  # gradi, 0 = vento frontale
     air_temperature: float = 20.0  # Celsius
     air_pressure: float = 1013.25  # hPa
     humidity: float = 50.0  # %
@@ -108,7 +108,7 @@ class SimulationParams:
             (self.draw_length > self.brace_height, "Allungo deve essere maggiore del brace height"),
             (0.5 <= self.efficiency <= 0.98, "Efficienza deve essere tra 0.5 e 0.98"),
             (self.target_distance > 0, "Distanza bersaglio deve essere positiva"),
-            (-5 <= self.wind_speed <= 20, "Velocità vento deve essere tra -5 e 20 m/s"),
+            (-20 <= self.wind_speed <= 20, "Velocità vento deve essere tra -20 e 20 m/s"),
             (-10 <= self.air_temperature <= 50, "Temperatura deve essere tra -10 e 50°C")
         ]
         
@@ -213,18 +213,18 @@ class EnhancedRK4Integrator:
         }
     
     def wind_force(self, vx: float, vy: float, params: SimulationParams) -> Tuple[float, float]:
-        """Calcolo forza del vento"""
+        """Calcolo forza del vento solo componente orizzontale in 2D"""
         if abs(params.wind_speed) < 0.1:
             return 0.0, 0.0
         
-        # Componenti vento
-        wind_angle = np.radians(params.wind_direction)
-        wind_x = params.wind_speed * np.cos(wind_angle)
-        wind_y = params.wind_speed * np.sin(wind_angle)
+        # In 2D: vento positivo = favorevole, negativo = contrario
+        # Solo componente orizzontale, nessuna componente verticale
+        wind_x = params.wind_speed  # m/s, positivo = a favore
+        wind_y = 0.0               # Nessun vento verticale
         
-        # Velocità relativa aria-freccia
+        # Velocità relativa aria-freccia (solo orizzontale)
         vrel_x = vx - wind_x
-        vrel_y = vy - wind_y
+        vrel_y = vy - wind_y  # = vy
         vrel = np.sqrt(vrel_x**2 + vrel_y**2)
         
         if vrel < 1e-6:
@@ -232,10 +232,13 @@ class EnhancedRK4Integrator:
         
         # Forza vento proporzionale al quadrato della velocità relativa
         A = np.pi * (params.diameter / 1000.0 / 2.0) ** 2
-        Cd_wind = 0.8  # Coefficiente semplificato per vento laterale
+        Cd_wind = 1.0  # Coefficiente di resistenza per vento frontale/posteriore
         F_wind = 0.5 * PhysicalConstants.AIR_DENSITY * Cd_wind * A * vrel**2
+        # Applica forza solo in direzione orizzontale
+        F_wind_x = -F_wind * (vrel_x / vrel)
+        F_wind_y = 0.0  # Nessuna forza verticale dal vento
         
-        return -F_wind * (vrel_x / vrel), -F_wind * (vrel_y / vrel)
+        return F_wind_x, F_wind_y
     
     def derivatives(self, t: float, state: np.ndarray, 
                    params: SimulationParams, angle_deg: float, 
@@ -502,7 +505,7 @@ def create_enhanced_trajectory_plot(result_with_drag: TrajectoryResults,
     
     # Informazioni sul vento
     if abs(params.wind_speed) > 0.1 and show_wind_effect:
-        wind_text = f"Vento: {params.wind_speed:.1f} m/s @ {params.wind_direction:.0f}°"
+        wind_text = f"Vento: {params.wind_speed:+.1f} m/s {'(favorevole)' if params.wind_speed > 0 else '(contrario)'}"
         ax1.text(0.02, 0.98, wind_text, transform=ax1.transAxes, 
                 bbox=dict(boxstyle="round,pad=0.3", facecolor="lightblue", alpha=0.8),
                 fontsize=10, verticalalignment='top')
@@ -882,8 +885,9 @@ def main():
     
     with col3:
         st.subheader("🌪️ Condizioni Ambientali")
-        wind_speed = st.number_input("Velocità vento (m/s)", -10.0, 20.0, 0.0, step=0.1)
-        wind_direction = st.number_input("Direzione vento (°)", 0, 360, 0, step=5)
+        wind_speed = st.number_input("Velocità vento (m/s)", -10.0, 20.0, 0.0, step=0.1,
+                                   help="Positivo = vento a favore, Negativo = vento contrario")
+        #wind_direction = st.number_input("Direzione vento (°)", 0, 360, 0, step=5)
         air_temperature = st.number_input("Temperatura (°C)", -10, 50, 20, step=1)
         air_pressure = st.number_input("Pressione (hPa)", 900, 1100, 1013, step=1)
         humidity = st.number_input("Umidità (%)", 0, 100, 50, step=5)
@@ -911,7 +915,7 @@ def main():
                 anchor_length=anchor_length, pelvis_height=pelvis_height, eye_offset_v=eye_offset_v,
                 target_distance=target_distance, target_height=target_height,
                 use_measured_v0=use_measured_v0, v0=v0,
-                wind_speed=wind_speed, wind_direction=wind_direction,
+                wind_speed=wind_speed, 
                 air_temperature=air_temperature, air_pressure=air_pressure, humidity=humidity
             )
         except ValueError as e:
