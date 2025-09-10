@@ -964,7 +964,7 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     plt.tight_layout()
     return fig
 
-def create_sight_scale_visualization(sight_data: pd.DataFrame) -> plt.Figure:
+def create_sight_scale_visualization(sight_data: pd.DataFrame, eye_to_nock: float, nock_to_riser: float, laser_distance: float = 30.0) -> plt.Figure:
     """Visualizzazione scala mirino interattiva"""
     
     fig, ax = plt.subplots(figsize=(6, 10))
@@ -1014,6 +1014,25 @@ def create_sight_scale_visualization(sight_data: pd.DataFrame) -> plt.Figure:
     except Exception:
         pass
 
+
+    # ---- Laser geometrico: raggio dalla punta della freccia ----
+    # Usa la stessa geometria del PDF: y_cm(x, o, t, d=0) dove
+    #   o = eye_to_nock, t = nock_to_riser, x = laser_distance (m)
+    def _y_cm(x: float, o: float, t: float, d: float = 0.0) -> float:
+        u = (o + d) / (t + x)
+        y_calc = 100.0 * x * (u / np.sqrt(1 + u**2))  # cm sul riser
+        return y_calc - d * 100.0
+    
+    y_laser = _y_cm(laser_distance, eye_to_nock, nock_to_riser, d=0.0)
+    # Disegna il laser come stella rossa sulla colonna del riser (x=0)
+    ax.scatter(0, y_laser, marker='*', s=220, edgecolors='darkred', color='red', zorder=10)
+    ax.text(2.2, y_laser, f"Laser {int(laser_distance)} m", va='center', fontsize=11, color='red', fontweight='bold')
+    
+    # Allarga l'asse Y se necessario per includere il laser
+    y_min_cur, y_max_cur = ax.get_ylim()
+    new_min = min(y_min_cur, y_laser - 2)
+    new_max = max(y_max_cur, y_laser + 2)
+    ax.set_ylim(new_min, new_max)
 
     # Stile grafico
     ax.set_xlim(-5, 5)
@@ -1675,7 +1694,7 @@ def main():
             with mirino_cols[1]:
                 if len(sight_scale_data) > 0:
                     st.markdown("### 🔍 Visualizzazione Mirino")
-                    mirino_figure = create_sight_scale_visualization(sight_scale_data)
+                    mirino_figure = create_sight_scale_visualization(sight_scale_data, eye_to_nock, nock_to_riser)
                     st.pyplot(mirino_figure, use_container_width=True)
             
             # Analisi Monte Carlo
