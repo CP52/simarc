@@ -175,7 +175,7 @@ class TrajectoryResults:
 # ==============================
 # MODELLO AERODINAMICO AVANZATO
 # ==============================
-@lru_cache(maxsize=2000)
+#@lru_cache(maxsize=2000)
 def calculate_air_density(temp_c: float, pressure_hpa: float, humidity_pct: float) -> float:
     """Calcola densità aria con correzione umidità (ASHRAE, 2017)"""
     temp_k = temp_c + 273.15
@@ -191,7 +191,7 @@ def calculate_air_density(temp_c: float, pressure_hpa: float, humidity_pct: floa
     
     return rho_dry + rho_vapor
 
-@lru_cache(maxsize=1500)
+#@lru_cache(maxsize=1500)
 def reynolds_number_enhanced(v: float, diameter_mm: float, params: SimulationParams) -> float:
     """Numero Reynolds con proprietà aria variabili"""
     rho = calculate_air_density(params.air_temperature, params.air_pressure, params.humidity)
