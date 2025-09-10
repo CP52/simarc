@@ -721,6 +721,79 @@ class SightScalePDFGenerator:
         
         return buffer
 
+
+def esporta_mirino_pdf_bytes(df_proj: pd.DataFrame, o_eye_cock: float, 
+                            t_cock_riser: float, filename: str = "mirino_riser.pdf") -> Tuple[io.BytesIO, str]:
+    """Esporta mirino in PDF grafico con tacche e laser a 30m"""
+    
+    def y_cm(x: float, o: float, t: float, d: float = 0.0) -> float:
+        u = (o + d) / (t + x)
+        y_calc = 100.0 * x * (u / np.sqrt(1 + u**2))
+        return y_calc - d * 100.0
+    
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    width, height = A4
+
+    def cm2pt(x_cm: float) -> float:
+        return x_cm * 28.346
+
+    y_vals = df_proj["Proiezione riser (cm)"].dropna().values.tolist()
+    y_vals.extend([0.0, y_cm(30.0, o_eye_cock, t_cock_riser, 0.0)])
+    y_min, y_max = float(min(y_vals)), float(max(y_vals))
+
+    x_center = width / 2.0
+    margin_bottom = cm2pt(5.0)
+    y0_pt = margin_bottom - cm2pt(y_min)
+
+    # Colonna riser
+    c.setLineWidth(2)
+    c.line(x_center, y0_pt + cm2pt(y_min), x_center, y0_pt + cm2pt(y_max))
+
+    # Tacche
+    c.setFont("Helvetica", 8)
+    for i, (_, row) in enumerate(df_proj.dropna().iterrows()):
+        y_pt = y0_pt + cm2pt(float(row["Proiezione riser (cm)"]))
+        c.line(x_center - 20, y_pt, x_center + 20, y_pt)
+        if i % 2 == 0:
+            c.drawString(x_center + 30, y_pt - 3, f"{int(row['Distanza (m)'])} m")
+        else:
+            text = f"{int(row['Distanza (m)'])} m"
+            tw = c.stringWidth(text, "Helvetica", 8)
+            c.drawString(x_center - 30 - tw, y_pt - 3, text)
+
+    # Linea zero
+    y_zero_pt = y0_pt + cm2pt(0.0)
+    c.setStrokeColorRGB(1, 0, 0)
+    c.line(x_center - 25, y_zero_pt, x_center + 25, y_zero_pt)
+    c.setFont("Helvetica-Bold", 8)
+    c.drawString(x_center + 30, y_zero_pt - 3, "0 cm (base)")
+    c.setStrokeColorRGB(0, 0, 0)
+
+    # Punto laser a 30m
+    y_laser_pt = y0_pt + cm2pt(y_cm(30.0, o_eye_cock, t_cock_riser, 0.0))
+    c.setFillColorRGB(0, 1, 0)
+    c.circle(x_center, y_laser_pt, 2.5, fill=1, stroke=0)
+    c.setFillColorRGB(0, 0, 0)
+    c.drawString(x_center + 30, y_laser_pt - 4, "Laser 30 m")
+
+    # Barre di controllo 5 cm
+    c.setLineWidth(3)
+    y_bar = y0_pt + cm2pt(y_min) - 40
+    c.line(x_center - cm2pt(2.5), y_bar, x_center + cm2pt(2.5), y_bar)
+    c.setFont("Helvetica", 9)
+    c.drawCentredString(x_center, y_bar - 12, "Oriz. 5 cm")
+    
+    x_bar = x_center + 80
+    c.line(x_bar, y_bar, x_bar, y_bar + cm2pt(5.0))
+    c.drawCentredString(x_bar, y_bar + 12, "Vert. 5 cm")
+
+    c.showPage()
+    c.save()
+    buf.seek(0)
+    return buf, filename
+
+
 # ==============================
 # VISUALIZZAZIONE GRAFICA AVANZATA
 # ==============================
@@ -1715,7 +1788,36 @@ def main():
                 except Exception as e:
                     st.error(f"Errore export Excel: {str(e)}")
             
-            with export_cols[2]:
+            
+with export_cols[2]:
+    # PDF scala mirino tabellare
+    if len(sight_scale_data) > 0:
+        try:
+            pdf_generator = SightScalePDFGenerator()
+            pdf_buffer = pdf_generator.create_sight_scale_pdf(
+                sight_scale_data, sight_calculator, params
+            )
+            st.download_button(
+                "🎯 Download Mirino (PDF Tabellare)",
+                data=pdf_buffer,
+                file_name=f"mirino_tabellare_{int(target_distance)}m.pdf",
+                mime="application/pdf"
+            )
+        except Exception as e:
+            st.error(f"Errore generazione PDF tabellare: {str(e)}")
+
+    # PDF mirino grafico con laser
+    try:
+        buf, fname = esporta_mirino_pdf_bytes(sight_scale_data, eye_to_nock, nock_to_riser)
+        st.download_button(
+            "📐 Download Mirino (PDF Grafico con Laser)",
+            data=buf,
+            file_name=fname,
+            mime="application/pdf"
+        )
+    except Exception as e:
+        st.error(f"Errore generazione PDF grafico: {str(e)}")
+
                 # PDF scala mirino
                 if len(sight_scale_data) > 0:
                     try:
