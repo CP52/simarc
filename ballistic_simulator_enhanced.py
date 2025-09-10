@@ -1789,36 +1789,8 @@ def main():
                     st.error(f"Errore export Excel: {str(e)}")
             
             
-with export_cols[2]:
-    # PDF scala mirino tabellare
-    if len(sight_scale_data) > 0:
-        try:
-            pdf_generator = SightScalePDFGenerator()
-            pdf_buffer = pdf_generator.create_sight_scale_pdf(
-                sight_scale_data, sight_calculator, params
-            )
-            st.download_button(
-                "🎯 Download Mirino (PDF Tabellare)",
-                data=pdf_buffer,
-                file_name=f"mirino_tabellare_{int(target_distance)}m.pdf",
-                mime="application/pdf"
-            )
-        except Exception as e:
-            st.error(f"Errore generazione PDF tabellare: {str(e)}")
-
-    # PDF mirino grafico con laser
-    try:
-        buf, fname = esporta_mirino_pdf_bytes(sight_scale_data, eye_to_nock, nock_to_riser)
-        st.download_button(
-            "📐 Download Mirino (PDF Grafico con Laser)",
-            data=buf,
-            file_name=fname,
-            mime="application/pdf"
-        )
-    except Exception as e:
-        st.error(f"Errore generazione PDF grafico: {str(e)}")
-
-                # PDF scala mirino
+            with export_cols[2]:
+                # PDF scala mirino tabellare
                 if len(sight_scale_data) > 0:
                     try:
                         pdf_generator = SightScalePDFGenerator()
@@ -1826,14 +1798,42 @@ with export_cols[2]:
                             sight_scale_data, sight_calculator, params
                         )
                         st.download_button(
-                            "🎯 Download Mirino (PDF)",
+                            "🎯 Download Mirino (PDF Tabellare)",
                             data=pdf_buffer,
-                            file_name=f"mirino_professionale_{int(target_distance)}m.pdf",
+                            file_name=f"mirino_tabellare_{int(target_distance)}m.pdf",
                             mime="application/pdf"
                         )
                     except Exception as e:
-                        st.error(f"Errore generazione PDF: {str(e)}")
+                        st.error(f"Errore generazione PDF tabellare: {str(e)}")
             
+                # PDF mirino grafico con laser
+                try:
+                    buf, fname = esporta_mirino_pdf_bytes(sight_scale_data, eye_to_nock, nock_to_riser)
+                    st.download_button(
+                        "📐 Download Mirino (PDF Grafico con Laser)",
+                        data=buf,
+                        file_name=fname,
+                        mime="application/pdf"
+                    )
+                except Exception as e:
+                    st.error(f"Errore generazione PDF grafico: {str(e)}")
+            
+            # PDF scala mirino
+            if len(sight_scale_data) > 0:
+                try:
+                    pdf_generator = SightScalePDFGenerator()
+                    pdf_buffer = pdf_generator.create_sight_scale_pdf(
+                        sight_scale_data, sight_calculator, params
+                    )
+                    st.download_button(
+                        "🎯 Download Mirino (PDF)",
+                        data=pdf_buffer,
+                        file_name=f"mirino_professionale_{int(target_distance)}m.pdf",
+                        mime="application/pdf"
+                    )
+                except Exception as e:
+                    st.error(f"Errore generazione PDF: {str(e)}")
+                        
             with export_cols[3]:
                 # JSON configurazione
                 config_export = {
