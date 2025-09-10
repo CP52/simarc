@@ -333,8 +333,8 @@ class SpinModel:
         draw_force_n = bow.draw_weight_lbs * 4.44822  # lbs -> N
         power_stroke = max(0.0, bow.draw_length_m - bow.brace_height_m)
         
-        # Energia immagazzinata (semplificazione lineare)
-        stored_energy = bow.efficiency * draw_force_n * power_stroke
+        # Energia immagazzinata (semplificazione lineare, ma in un modello lineare la curva forza–spostamento è un triangolo, quindi *0.5)
+        stored_energy = bow.efficiency * draw_force_n * power_stroke * 0.5
         
         # Velocità (conservazione energia)
         return np.sqrt(2 * stored_energy / mass_kg) if mass_kg > 0 else 0.0
