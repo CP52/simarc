@@ -888,7 +888,7 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
         y_values.extend([no_drag_result.Y.min(), no_drag_result.Y.max()])
     
     y_margin = max(0.5, (max(y_values) - min(y_values)) * 0.1)
-    ax_traj.set_xlim(-x_margin, x_max)
+    ax_traj.set_xlim(0, target_distance + 10)
     ax_traj.set_ylim(min(y_values) - y_margin, max(y_values) + y_margin)
     
     # === GRAFICO VELOCITÀ ===
@@ -1001,18 +1001,6 @@ def create_sight_scale_visualization(sight_data: pd.DataFrame, eye_to_nock: floa
         ax.text(side * 3.5, proj, f"({drop_val:.1f}cm)", 
                va='center', ha='left' if side > 0 else 'right',
                fontsize=9, style='italic', alpha=0.7)
-    # Punto laser a 30 m
-    try:
-        # Ordina per distanza per interpolazione robusta
-        order = np.argsort(distances)
-        d_sorted = distances[order]
-        p_sorted = projections[order]
-        # Interpola se 30 m non è esattamente presente
-        y_laser_30 = float(np.interp(30.0, d_sorted, p_sorted))
-        ax.scatter(0, y_laser_30, marker='*', s=200, edgecolors='darkred', color='red', zorder=10)
-        ax.text(2.2, y_laser_30, "Laser 30 m", va='center', fontsize=11, color='red', fontweight='bold')
-    except Exception:
-        pass
 
 
     # ---- Laser geometrico: raggio dalla punta della freccia ----
@@ -1837,22 +1825,6 @@ def main():
                     )
                 except Exception as e:
                     st.error(f"Errore generazione PDF grafico: {str(e)}")
-            
-            # PDF scala mirino
-            if len(sight_scale_data) > 0:
-                try:
-                    pdf_generator = SightScalePDFGenerator()
-                    pdf_buffer = pdf_generator.create_sight_scale_pdf(
-                        sight_scale_data, sight_calculator, params
-                    )
-                    st.download_button(
-                        "🎯 Download Mirino (PDF)",
-                        data=pdf_buffer,
-                        file_name=f"mirino_professionale_{int(target_distance)}m.pdf",
-                        mime="application/pdf"
-                    )
-                except Exception as e:
-                    st.error(f"Errore generazione PDF: {str(e)}")
                         
             with export_cols[3]:
                 # JSON configurazione
