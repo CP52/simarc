@@ -91,7 +91,7 @@ def calculate_velocity(params: SimulationParams) -> float:
     mass = params.mass / 1000.0
     F = params.draw_force * 4.44822
     elong = max(0.0, params.draw_length - params.brace_height)
-    E = params.efficiency * F * elong
+    E = params.efficiency * 0.5 * F * elong
     return np.sqrt(max(0.0, 2 * E / mass))
 
 # ==============================
