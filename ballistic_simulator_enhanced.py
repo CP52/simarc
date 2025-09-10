@@ -888,7 +888,7 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
         y_values.extend([no_drag_result.Y.min(), no_drag_result.Y.max()])
     
     y_margin = max(0.5, (max(y_values) - min(y_values)) * 0.1)
-    ax_traj.set_xlim(0, target_distance + 10) if target_distance is not None else ax_traj.set_xlim(0, trajectory_result.range_distance * 1.05)
+    ax_traj.set_xlim(0, target_distance + 10) if target_distance is not None else ax_traj.set_xlim(0, trajectory_result.range_distance * 1.05) if target_distance is not None else ax_traj.set_xlim(0, target_distance + 10) if target_distance is not None else ax_traj.set_xlim(0, trajectory_result.range_distance * 1.05)
     ax_traj.set_ylim(min(y_values) - y_margin, max(y_values) + y_margin)
     
     # === GRAFICO VELOCITÀ ===
@@ -1639,8 +1639,9 @@ def main():
             
             # Grafico principale traiettoria
             st.markdown("### 📈 Analisi Traiettoria Completa")
-            trajectory_figure = create_comprehensive_trajectory_plot(main_result, params, ideal_result, show_wind_effects, target_distance=target_distance)
-
+            trajectory_figure = create_comprehensive_trajectory_plot(
+                main_result, params, ideal_result, show_wind_effects
+            , target_distance, target_distance=target_distance)
             st.pyplot(trajectory_figure, use_container_width=True)
             
             # Statistiche integrazione
