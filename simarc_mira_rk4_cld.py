@@ -1,5 +1,5 @@
 # simarc_mira_rk4_improved.py
-# App Streamlit migliorata: simulazione balistica con RK4 adattativo + generatore mirino
+# App Streamlit migliorata: simulazione balistica con RK4 adattativo + generatore mirino + modifica 0.5 per f(x) 
 
 import streamlit as st
 import numpy as np
@@ -185,8 +185,8 @@ def calculate_velocity_enhanced(params: SimulationParams) -> float:
     F = params.draw_force * 4.44822  # lb -> N
     elong = max(0.0, params.draw_length - params.brace_height)
     
-    # Energia immagazzinata nel sistema arco-corda
-    E = params.efficiency * F * elong
+    # Energia immagazzinata nel sistema arco-corda tenendo conto F(x) a triangolo
+    E = params.efficiency * F * elong * 0.5
     
     # Correzione per densità aria (effetto piccolo ma realistico)
     air_density_ratio = (params.air_pressure / 1013.25) * (293.15 / (273.15 + params.air_temperature))
