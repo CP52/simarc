@@ -1001,15 +1001,20 @@ def create_sight_scale_visualization(sight_data: pd.DataFrame) -> plt.Figure:
         ax.text(side * 3.5, proj, f"({drop_val:.1f}cm)", 
                va='center', ha='left' if side > 0 else 'right',
                fontsize=9, style='italic', alpha=0.7)
-    
-    # Punto zero di riferimento
-    zero_proj = 0  # Assumiamo zero al centro
-    ax.axhline(y=zero_proj, color='red', linewidth=4, alpha=0.8,
-              linestyle='-', label='Zero di riferimento')
-    ax.text(2.5, zero_proj, "ZERO", va='center', ha='left',
-           fontsize=12, fontweight='bold', color='red',
-           bbox=dict(boxstyle="round,pad=0.3", facecolor="yellow", alpha=0.8))
-    
+    # Punto laser a 30 m
+    try:
+        # Ordina per distanza per interpolazione robusta
+        order = np.argsort(distances)
+        d_sorted = distances[order]
+        p_sorted = projections[order]
+        # Interpola se 30 m non è esattamente presente
+        y_laser_30 = float(np.interp(30.0, d_sorted, p_sorted))
+        ax.scatter(0, y_laser_30, marker='*', s=200, edgecolors='darkred', color='red', zorder=10)
+        ax.text(2.2, y_laser_30, "Laser 30 m", va='center', fontsize=11, color='red', fontweight='bold')
+    except Exception:
+        pass
+
+
     # Stile grafico
     ax.set_xlim(-5, 5)
     ax.set_ylim(y_range[0], y_range[1])
@@ -1018,10 +1023,6 @@ def create_sight_scale_visualization(sight_data: pd.DataFrame) -> plt.Figure:
     ax.grid(True, axis='y', linestyle='--', alpha=0.4)
     ax.set_xticks([])  # Rimuovi tick X
     ax.set_facecolor('#f8f9fa')
-    
-    # Scala di riferimento
-    ax.text(0, y_range[0] + 1, "← 5cm →", ha='center', va='bottom',
-           fontsize=10, bbox=dict(boxstyle="round,pad=0.2", facecolor="lightgray"))
     
     plt.tight_layout()
     return fig
