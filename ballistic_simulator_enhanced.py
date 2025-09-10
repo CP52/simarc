@@ -1639,9 +1639,8 @@ def main():
             
             # Grafico principale traiettoria
             st.markdown("### 📈 Analisi Traiettoria Completa")
-            trajectory_figure = create_comprehensive_trajectory_plot(
-                main_result, params, ideal_result, show_wind_effects
-            , target_distance)
+            trajectory_figure = create_comprehensive_trajectory_plot(main_result, params, ideal_result, show_wind_effects, target_distance=target_distance)
+
             st.pyplot(trajectory_figure, use_container_width=True)
             
             # Statistiche integrazione
