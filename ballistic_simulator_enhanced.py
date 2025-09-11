@@ -893,16 +893,13 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     y_values = [Y1.min(), Y1.max(), params.target_height, y0, y_sight_target]
 
     if params.target_height >= y0:
-        # Tiro in piano o verso l'alto: non andare mai sotto i piedi
         y_min_plot = 0.0
-        # Limite superiore fermato alla linea di mira al bersaglio (o quota di uscita), con +1 m
-        y_max_plot = max(y0, y_sight_target) + 1.0
+        # PATCH: includi sia apice traiettoria che linea di mira, ma non oltre il maggiore
+        y_max_plot = max(min(Y1.max(), y_sight_target), y0) + 1.0
     else:
-        # Tiro verso il basso: mostra 1 m sotto il bersaglio e 1 m sopra la quota di uscita
         y_min_plot = params.target_height - 1.0
         y_max_plot = y0 + 1.0
 
-    # Limiti orizzontali invariati
     if target_distance is not None:
         ax_traj.set_xlim(0, target_distance + 10)
     else:
