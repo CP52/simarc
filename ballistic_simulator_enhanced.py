@@ -835,7 +835,7 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     # Linea di mira
     y0 = params.launch_height
     angle_rad = np.radians(main_result.angle_degrees)
-    x_sight = np.array([0, params.target_distance * 1.1])
+    x_sight = np.array([0, params.target_distance])  # PATCH: linea di mira fino al bersaglio
     y_sight = y0 + np.tan(angle_rad) * x_sight
     ax_traj.plot(x_sight, y_sight, color=PLOT_CONFIG['colors']['danger'],
                 linestyle=':', linewidth=2, label="Linea di mira", alpha=0.8)
@@ -895,8 +895,8 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     if params.target_height >= y0:
         # Tiro in piano o verso l'alto: non andare mai sotto i piedi
         y_min_plot = 0.0
-        # Limite superiore fermato alla linea di mira al bersaglio con +1 m
-        y_max_plot = y_sight_target + 1.0
+        # Limite superiore fermato alla linea di mira al bersaglio (o quota di uscita), con +1 m
+        y_max_plot = max(y0, y_sight_target) + 1.0
     else:
         # Tiro verso il basso: mostra 1 m sotto il bersaglio e 1 m sopra la quota di uscita
         y_min_plot = params.target_height - 1.0
