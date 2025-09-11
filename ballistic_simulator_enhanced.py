@@ -895,8 +895,8 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     if params.target_height >= y0:
         # Tiro in piano o verso l'alto: non andare mai sotto i piedi
         y_min_plot = 0.0
-        # Limite superiore fermato alla linea di mira al bersaglio (o quota di uscita), con +1 m
-        y_max_plot = max(y0, y_sight_target) + 1.0
+        # Limite superiore fermato alla linea di mira al bersaglio con +1 m
+        y_max_plot = y_sight_target + 1.0
     else:
         # Tiro verso il basso: mostra 1 m sotto il bersaglio e 1 m sopra la quota di uscita
         y_min_plot = params.target_height - 1.0
