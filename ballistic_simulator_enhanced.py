@@ -887,9 +887,29 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     if no_drag_result:
         y_values.extend([no_drag_result.Y.min(), no_drag_result.Y.max()])
     
-    y_margin = max(0.5, (max(y_values) - min(y_values)) * 0.1)
-    ax_traj.set_xlim(0, target_distance + 10) if target_distance is not None else ax_traj.set_xlim(0, main_result.range_distance * 1.05)
-    ax_traj.set_ylim(min(y_values) - y_margin, max(y_values) + y_margin)
+    # PATCH START: limiti verticali puliti e deterministici
+    # Gestione limiti verticali in base alla geometria del tiro
+    y0 = params.launch_height
+    y_sight_target = y0 + np.tan(angle_rad) * params.target_distance
+
+    if params.target_height >= y0:
+        # Tiro in piano o verso l'alto: non andare mai sotto i piedi
+        y_min_plot = 0.0
+        # Limite superiore fermato alla linea di mira al bersaglio (o quota di uscita), con +1 m
+        y_max_plot = max(y0, y_sight_target) + 1.0
+    else:
+        # Tiro verso il basso: mostra 1 m sotto il bersaglio e 1 m sopra la quota di uscita
+        y_min_plot = params.target_height - 1.0
+        y_max_plot = y0 + 1.0
+
+    # Limiti orizzontali invariati
+    if target_distance is not None:
+        ax_traj.set_xlim(0, target_distance + 10)
+    else:
+        ax_traj.set_xlim(0, main_result.range_distance * 1.05)
+
+    ax_traj.set_ylim(y_min_plot, y_max_plot)
+    # PATCH END - y_margin, max(y_values) + y_margin)
     
     # === GRAFICO VELOCITÀ ===
     V_total = np.sqrt(main_result.V_x**2 + main_result.V_y**2)
