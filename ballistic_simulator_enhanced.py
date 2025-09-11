@@ -845,13 +845,7 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     y_sight_target = y0 + np.tan(angle_rad) * params.target_distance
     drop_cm = (y_sight_target - y_impact) * 100.0
     
-    ,
-                        xytext=(params.target_distance - 10, y_impact - 1.5),
-                        arrowprops=dict(arrowstyle="->", 
-                                      color=PLOT_CONFIG['colors']['danger'], lw=2),
-                        bbox=dict(boxstyle="round,pad=0.5", 
-                                facecolor="white", edgecolor="red", alpha=0.9),
-                        fontsize=11, fontweight='bold')
+    
     
     # Info vento
     if abs(params.wind_speed) > 0.1 and show_wind:
