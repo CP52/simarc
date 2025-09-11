@@ -846,8 +846,6 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     drop_cm = (y_sight_target - y_impact) * 100.0
     
     if abs(drop_cm) > 0.5:
-        # PATCH: annotate Drop tenendo il testo dentro ai limiti Y
-    if abs(drop_cm) > 0.5:
         # offset verso l'alto o basso a seconda di dove c'è spazio
         y_center = 0.5 * (y_min_plot + y_max_plot)
         offset = -1.0 if y_impact > y_center else 1.0
