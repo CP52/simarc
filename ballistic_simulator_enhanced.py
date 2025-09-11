@@ -904,7 +904,7 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     else:
         ax_traj.set_xlim(0, main_result.range_distance * 1.05)
 
-    ax_traj.set_ylim(y_min_plot, y_max_plot)(min(y_values) - y_margin, max(y_values) + y_margin)
+    ax_traj.set_ylim(y_min_plot, y_max_plot)
     
     # === GRAFICO VELOCITÀ ===
     V_total = np.sqrt(main_result.V_x**2 + main_result.V_y**2)
