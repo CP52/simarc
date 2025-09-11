@@ -861,7 +861,7 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
                                          color=PLOT_CONFIG['colors']['danger'], lw=2),
                          bbox=dict(boxstyle="round,pad=0.4",
                                    facecolor="white", edgecolor="red", alpha=0.9),
-                         fontsize=11, fontweight='bold', clip_on=True))
+                         fontsize=11, fontweight='bold', clip_on=True)
     else:
         # Tiro verso il basso
         y_min_plot = params.target_height - 1.0  # 1 m sotto il bersaglio
