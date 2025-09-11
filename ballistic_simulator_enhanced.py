@@ -880,10 +880,10 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     
     # Limiti assi ottimizzati
     x_margin = max(2, params.target_distance * 0.05)
-    x_max = max(X1.max(), params.target_distance) + x_margin
-    
-    y_sight_end = y0 + np.tan(angle_rad) * x_max
-    y_values = [Y1.min(), Y1.max(), params.target_height, y0, y_sight_end]
+    x_max = params.target_distance + x_margin   # PATCH: limite orizzontale basato SOLO sul bersaglio
+
+    y_sight_target = y0 + np.tan(angle_rad) * params.target_distance
+    y_values = [Y1.min(), Y1.max(), params.target_height, y0, y_sight_target]
     if no_drag_result:
         y_values.extend([no_drag_result.Y.min(), no_drag_result.Y.max()])
     
