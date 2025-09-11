@@ -885,12 +885,14 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     y_values = [Y1.min(), Y1.max(), params.target_height, y0, y_sight_target]
 
     if params.target_height >= y0:
+        # Tiro in piano o verso l'alto
         y_min_plot = 0.0
-        # PATCH: includi sia apice traiettoria che linea di mira, ma non oltre il maggiore
-        y_max_plot = max(min(Y1.max(), y_sight_target), y0) + 1.0
+        y_max_plot = max(Y1.max(), y_sight_target) + 0.5  # margine minimo
     else:
+        #Tiro verso il basso
         y_min_plot = params.target_height - 1.0
-        y_max_plot = y0 + 1.0
+        y_max_plot = max(y0, Y1.max()) + 0.5
+
 
     if target_distance is not None:
         ax_traj.set_xlim(0, target_distance + 10)
