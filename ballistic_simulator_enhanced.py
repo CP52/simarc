@@ -889,21 +889,22 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     
     y_margin = max(0.5, (max(y_values) - min(y_values)) * 0.1)
 
-    # Limite inferiore: mai sotto i piedi dell'arciere, a meno che il bersaglio non sia più basso
+    # Limite inferiore: mai sotto i piedi, salvo bersaglio più basso
     ground_level = 0.0
     if params.target_height < ground_level:
-        y_min_plot = min(params.target_height, Y1.min()) - y_margin
+        # Includi bersaglio e traiettoria, con margine ridotto
+        y_min_plot = min(params.target_height, Y1.min()) - 0.2 * abs(y_margin)
     else:
         y_min_plot = ground_level
 
     y_max_plot = max(y_values) + y_margin
 
     if target_distance is not None:
-        ax_traj.set_xlim(0, target_distance + 5)
+        ax_traj.set_xlim(0, target_distance + 10)
     else:
         ax_traj.set_xlim(0, main_result.range_distance * 1.05)
 
-    ax_traj.set_ylim(y_min_plot, y_max_plot)
+    ax_traj.set_ylim(y_min_plot, y_max_plot)(min(y_values) - y_margin, max(y_values) + y_margin)
     
     # === GRAFICO VELOCITÀ ===
     V_total = np.sqrt(main_result.V_x**2 + main_result.V_y**2)
