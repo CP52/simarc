@@ -899,7 +899,7 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     y_max_plot = max(y_values) + y_margin
 
     if target_distance is not None:
-        ax_traj.set_xlim(0, target_distance + 10)
+        ax_traj.set_xlim(0, target_distance + 5)
     else:
         ax_traj.set_xlim(0, main_result.range_distance * 1.05)
 
