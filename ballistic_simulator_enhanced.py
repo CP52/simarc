@@ -846,67 +846,35 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     drop_cm = (y_sight_target - y_impact) * 100.0
     
     if abs(drop_cm) > 0.5:
+        # PATCH: annotate Drop tenendo il testo dentro ai limiti Y
+    if abs(drop_cm) > 0.5:
+        # offset verso l'alto o basso a seconda di dove c'è spazio
+        y_center = 0.5 * (y_min_plot + y_max_plot)
+        offset = -1.0 if y_impact > y_center else 1.0
+        y_text = np.clip(y_impact + offset, y_min_plot + 0.3, y_max_plot - 0.3)
+
         ax_traj.annotate(f"Drop: {drop_cm:.1f} cm",
-                        xy=(params.target_distance, y_impact),
-                        xytext=(params.target_distance - 10, y_impact - 1.5),
-                        arrowprops=dict(arrowstyle="->", 
-                                      color=PLOT_CONFIG['colors']['danger'], lw=2),
-                        bbox=dict(boxstyle="round,pad=0.5", 
-                                facecolor="white", edgecolor="red", alpha=0.9),
-                        fontsize=11, fontweight='bold')
-    
-    # Info vento
-    if abs(params.wind_speed) > 0.1 and show_wind:
-        wind_desc = "favorevole" if params.wind_speed > 0 else "contrario"
-        wind_text = f"Vento: {params.wind_speed:+.1f} m/s ({wind_desc})"
-        ax_traj.text(0.02, 0.98, wind_text, transform=ax_traj.transAxes,
-                    bbox=dict(boxstyle="round,pad=0.4", 
-                            facecolor=PLOT_CONFIG['colors']['info'], alpha=0.8),
-                    fontsize=11, verticalalignment='top', color='white')
-    
-    # Stile grafico principale
-    ax_traj.set_xlabel("Distanza (m)", fontsize=12, fontweight='bold')
-    ax_traj.set_ylabel("Altezza (m)", fontsize=12, fontweight='bold')
-    ax_traj.grid(True, alpha=0.3, linestyle='-', linewidth=0.5)
-    ax_traj.legend(loc='upper right', framealpha=0.9, fontsize=10)
-    
-    # Titolo informativo
-    title = (f"Simulazione Balistica Avanzata - Integrazione RK4 Adattiva\n"
-            f"Angolo: {main_result.angle_degrees:.2f}° | "
-            f"v₀: {main_result.v0:.1f} m/s | "
-            f"Tempo volo: {main_result.flight_time:.2f} s | "
-            f"Altezza max: {main_result.max_height:.1f} m")
-    ax_traj.set_title(title, fontsize=14, pad=20, fontweight='bold')
-    
-    # Limiti assi ottimizzati
-    x_margin = max(2, params.target_distance * 0.05)
-    x_max = params.target_distance + x_margin   # PATCH: limite orizzontale basato SOLO sul bersaglio
-
-    y_sight_target = y0 + np.tan(angle_rad) * params.target_distance
-    y_values = [Y1.min(), Y1.max(), params.target_height, y0, y_sight_target]
-    if no_drag_result:
-        y_values.extend([no_drag_result.Y.min(), no_drag_result.Y.max()])
-    
-    # PATCH START: limiti verticali puliti e deterministici
-    # Gestione limiti verticali in base alla geometria del tiro
-    y_sight_target = y0 + np.tan(angle_rad) * params.target_distance
-    y_values = [Y1.min(), Y1.max(), params.target_height, y0, y_sight_target]
-
-    if params.target_height >= y0:
-        y_min_plot = 0.0
-        # PATCH: includi sia apice traiettoria che linea di mira, ma non oltre il maggiore
-        y_max_plot = max(min(Y1.max(), y_sight_target), y0) + 1.0
+                         xy=(params.target_distance, y_impact),
+                         xytext=(params.target_distance - 0.25 * (target_distance if target_distance else params.target_distance),
+                                 y_text),
+                         arrowprops=dict(arrowstyle="->",
+                                         color=PLOT_CONFIG['colors']['danger'], lw=2),
+                         bbox=dict(boxstyle="round,pad=0.4",
+                                   facecolor="white", edgecolor="red", alpha=0.9),
+                         fontsize=11, fontweight='bold', clip_on=True))
     else:
-        y_min_plot = params.target_height - 1.0
-        y_max_plot = y0 + 1.0
+        # Tiro verso il basso
+        y_min_plot = params.target_height - 1.0  # 1 m sotto il bersaglio
+        y_max_plot = y0 + 1.0                    # 1 m sopra la quota di uscita
 
+    # Limiti orizzontali (invariati)
     if target_distance is not None:
         ax_traj.set_xlim(0, target_distance + 10)
     else:
         ax_traj.set_xlim(0, main_result.range_distance * 1.05)
 
     ax_traj.set_ylim(y_min_plot, y_max_plot)
-    # PATCH END - y_margin, max(y_values) + y_margin)
+    # PATCH END: limiti verticali - y_margin, max(y_values) + y_margin)
     
     # === GRAFICO VELOCITÀ ===
     V_total = np.sqrt(main_result.V_x**2 + main_result.V_y**2)
