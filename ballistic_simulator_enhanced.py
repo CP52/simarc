@@ -889,8 +889,8 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     
     # PATCH START: limiti verticali puliti e deterministici
     # Gestione limiti verticali in base alla geometria del tiro
-    y0 = params.launch_height
     y_sight_target = y0 + np.tan(angle_rad) * params.target_distance
+    y_values = [Y1.min(), Y1.max(), params.target_height, y0, y_sight_target]
 
     if params.target_height >= y0:
         # Tiro in piano o verso l'alto: non andare mai sotto i piedi
