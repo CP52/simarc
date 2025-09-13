@@ -49,7 +49,7 @@ def calculate_velocity(params):
     F = params['draw_force'] * 4.44822
     elong = max(0.0, params['draw_length'] - params['brace_height'])
     efficiency = params['efficiency']
-    E = efficiency * F * elong
+    E = efficiency * F * elong*0.5
     return np.sqrt(max(0.0, 2 * E / mass))
 
 def simulate_trajectory(angle_deg, params, include_drag=True):
@@ -318,5 +318,6 @@ if st.button("Calcola"):
         f"**v₀:** {v0_calc:.2f} m/s\n"
         f"**Tempo volo:** {t1:.2f} s"
     )
+
 
 
