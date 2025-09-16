@@ -581,7 +581,7 @@ class SightScalePDFGenerator:
         self.width, self.height = page_size
         
     def create_sight_scale_pdf(self, sight_data: pd.DataFrame, 
-                              sight_calculator: SightingSystemCalculator,
+                              sight_calculator: "SightingSystemCalculator",
                               params: SimulationParams) -> io.BytesIO:
         """Crea PDF scala mirino completo"""
         buffer = io.BytesIO()
