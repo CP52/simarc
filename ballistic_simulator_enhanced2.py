@@ -101,7 +101,7 @@ class SimulationParams:
     
     # Parametri bersaglio
     target_distance: float        # [m]
-    target_height: float          # [m]
+    params.target_height: float          # [m]
     
     # Velocità
     use_measured_v0: bool
@@ -505,7 +505,7 @@ def interpolate_trajectory_point(X: np.ndarray, Y: np.ndarray, x_target: float,
 def find_optimal_firing_angle(params: SimulationParams, integrator: AdvancedRK4Integrator,
                              method: str = 'brent') -> Tuple[float, float]:
     """Ricerca angolo ottimale con algoritmi robusti"""
-    target_height = params.target_height
+    params.target_height = params.target_height
     target_distance = params.target_distance
 
     def objective_function(angle_deg):
@@ -518,7 +518,7 @@ def find_optimal_firing_angle(params: SimulationParams, integrator: AdvancedRK4I
                 return 1e6
             
             y_at_target = interpolate_trajectory_point(result.X, result.Y, target_distance)
-            error = abs(y_at_target - target_height)
+            error = abs(y_at_target - params.target_height)
             
             return error
         except Exception as e:
@@ -527,7 +527,7 @@ def find_optimal_firing_angle(params: SimulationParams, integrator: AdvancedRK4I
 
     # Stima iniziale fisica
     v0_est = calculate_velocity_enhanced(params)
-    h_diff = params.target_height - params.launch_height
+    h_diff = params.params.target_height - params.launch_height
     
     # Formula balistica approssimata con correzione drag
     try:
@@ -661,7 +661,7 @@ class SightScalePDFGenerator:
         story.append(sight_table)
         story.append(Spacer(1, 1*cm))
         
-        # Note tecniche
+        
         notes_text = """
         <b>Note Tecniche:</b><br/>
         • I valori sono calcolati per le condizioni ambientali specificate<br/>
@@ -1454,7 +1454,7 @@ def main():
         
         st.markdown("### 🎯 Parametri Bersaglio")
         target_distance = st.number_input("Distanza (m)", 5.0, 100.0, 40.0, step=1.0)
-        target_height = st.number_input("Altezza (m)", -10.0, 10.0, 1.4, step=0.1)
+        params.target_height = st.number_input("Altezza (m)", -10.0, 10.0, 1.4, step=0.1)
         
         st.markdown("### ⚡ Velocità")
         use_measured_v0 = st.checkbox("Usa velocità misurata", 
@@ -1496,7 +1496,7 @@ def main():
                 efficiency=efficiency, bow_type=bow_type,
                 launch_height_neutral=launch_height_neutral,
                 anchor_length=anchor_length, pelvis_height=pelvis_height, eye_offset_v=eye_offset_v,
-                target_distance=target_distance, target_height=target_height,
+                target_distance=target_distance, params.target_height=params.target_height,
                 use_measured_v0=use_measured_v0, v0=v0_measured,
                 wind_speed=wind_speed, air_temperature=air_temperature,
                 air_pressure=air_pressure, humidity=humidity, altitude=altitude
@@ -1635,7 +1635,7 @@ def main():
             metrics_cols = st.columns(5)
             
             with metrics_cols[0]:
-                direct_angle = np.degrees(np.arctan2(params.target_height - params.launch_height, 
+                direct_angle = np.degrees(np.arctan2(params.params.target_height - params.launch_height, 
                                                    target_distance))
                 st.metric("Angolo Ottimale", f"{optimal_angle:.2f}°",
                          delta=f"{optimal_angle - direct_angle:+.2f}°")
@@ -1913,7 +1913,7 @@ def main():
             st.success("🎉 Simulazione balistica completata con successo! "
                       "Tutti i dati sono stati calcolati e sono disponibili per il download.")
             
-            # Note tecniche finali
+            
             with st.expander("📚 Note Tecniche e Limitazioni"):
                 st.markdown("""
                 **Modello Fisico:**
@@ -1949,7 +1949,7 @@ def main():
             # Cleanup progress indicators
             progress_container.empty()
 
-if __name__ == "__main__":
+
     main()
 
 class SightingSystemCalculator:
@@ -2005,7 +2005,7 @@ def display_enhanced_metrics(main_result, params, optimal_angle, target_distance
     
     # Calcoli preliminari
     mass_kg = params.mass / 1000.0
-    direct_angle = np.degrees(np.arctan2(params.target_height - params.launch_height, target_distance))
+    direct_angle = np.degrees(np.arctan2(params.params.target_height - params.launch_height, target_distance))
     
     # NUOVO: Calcola energia residua al bersaglio
     v_x_target = interpolate_trajectory_point(main_result.X, main_result.V_x, target_distance)
@@ -2053,7 +2053,7 @@ def create_enhanced_summary(main_result, params, optimal_angle, target_distance)
     initial_kinetic_energy = 0.5 * mass_kg * main_result.v0**2
     
     # Altri calcoli esistenti
-    direct_angle = np.degrees(np.arctan2(params.target_height - params.launch_height, target_distance))
+    direct_angle = np.degrees(np.arctan2(params.params.target_height - params.launch_height, target_distance))
     target_drop = (params.launch_height + np.tan(np.radians(optimal_angle)) * target_distance -
                   interpolate_trajectory_point(main_result.X, main_result.Y, target_distance)) * 100
     energy_retention = (v_final_at_target**2 / main_result.v0**2) * 100
@@ -2122,13 +2122,10 @@ def export_comprehensive_analysis_with_energy(trajectory_result: TrajectoryResul
     
     try:
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            # Sheet esistenti...
-            
-            # Sheet 3: Traiettoria completa CON ENERGIA (modificato)
+            # Sheet 3: Traiettoria completa CON ENERGIA (campionata per Excel)
             max_points = 500
             step = max(1, len(trajectory_result.X) // max_points)
             
-            # Calcoli energia lungo la traiettoria
             mass_kg = params.mass / 1000.0
             v_total_array = np.sqrt(trajectory_result.V_x[::step]**2 + trajectory_result.V_y[::step]**2)
             kinetic_energy_array = 0.5 * mass_kg * v_total_array**2
@@ -2142,16 +2139,86 @@ def export_comprehensive_analysis_with_energy(trajectory_result: TrajectoryResul
                 'Velocità Y (m/s)': trajectory_result.V_y[::step],
                 'Velocità totale (m/s)': v_total_array,
                 'Tempo (s)': trajectory_result.times[::step],
-                'Energia cinetica (J)': kinetic_energy_array,           # NUOVO
-                'Ritenzione energia (%)': energy_retention_array,       # NUOVO
-                'Perdita energia (J)': initial_energy - kinetic_energy_array  # NUOVO
+                'Energia cinetica (J)': kinetic_energy_array,
+                'Ritenzione energia (%)': energy_retention_array,
+                'Perdita energia (J)': initial_energy - kinetic_energy_array
             })
             trajectory_data.to_excel(writer, sheet_name='Traiettoria_Completa', index=False)
             
-            # Sheet 4: Scala mirino (già modificata sopra)
-            sight_data.to_excel(writer, sheet_name='Scala_Mirino', index=False)
+            # Sheet 4: Scala mirino
+            try:
+                sight_data.to_excel(writer, sheet_name='Scala_Mirino', index=False)
+            except Exception:
+                pass
             
-            # Resto del codice invariato...
+            # Sheet MonteCarlo (opzionale)
+            if monte_carlo_stats:
+                mc_df = pd.DataFrame(monte_carlo_stats)
+                mc_df.to_excel(writer, sheet_name='MonteCarlo', index=False)
         
         output.seek(0)
         return output
+
+    except Exception as e:
+        logger.error(f"Errore export Excel: {e}")
+        # Fallback CSV
+        output = io.BytesIO()
+        try:
+            if isinstance(sight_data, pd.DataFrame):
+                sight_data.to_csv(output, index=False)
+            else:
+                output.write(b"")
+        except Exception:
+            output.write(b"")
+        output.seek(0)
+        return output
+
+    except Exception as e:
+        logger.error(f"Errore export Excel: {e}")
+        # Fallback CSV
+        output = io.BytesIO()
+        try:
+            sight_data.to_csv(output, index=False)
+        except Exception:
+            output.write(b"")
+        output.seek(0)
+        return output
+
+# Note tecniche finali
+            with st.expander("📚 Note Tecniche e Limitazioni"):
+                st.markdown("""
+                **Modello Fisico:**
+                - Integrazione numerica RK4 con controllo adattivo dell'errore
+                - Modello aerodinamico basato su numero di Reynolds variabile
+                - Correzioni ambientali per densità aria (temperatura, pressione, umidità)
+                - Modello vento semplificato 2D (solo componente orizzontale)
+                
+                **Assunzioni:**
+                - Freccia considerata come corpo rigido puntiforme
+                - Traiettoria in piano verticale (no deriva laterale)
+                - Condizioni atmosferiche uniformi lungo la traiettoria
+                - Resistenza aria proporzionale al quadrato della velocità
+                
+                **Precisione:**
+                - Errore numerico controllato (tolleranza impostata)
+                - Validazione attraverso conservazione energia
+                - Confronto con modelli analitici semplificati
+                
+                **Applicabilità:**
+                - Tiro con l'arco sportivo e da caccia
+                - Distanze tipiche 10-100m
+                - Condizioni ambientali moderate
+                """)
+            
+        except Exception as e:
+            st.error(f"❌ Errore durante la simulazione: {str(e)}")
+            import traceback
+            with st.expander("🔍 Dettagli Errore (per debugging)"):
+                st.code(traceback.format_exc())
+        
+        finally:
+            # Cleanup progress indicators
+            progress_container.empty()
+
+if __name__ == "__main__":
+    main()
