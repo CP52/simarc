@@ -2210,15 +2210,15 @@ def export_comprehensive_analysis_with_energy(trajectory_result: TrajectoryResul
             - Condizioni ambientali moderate
             """)
             
-        except Exception as e:
-            st.error(f"❌ Errore durante la simulazione: {str(e)}")
-            import traceback
-            with st.expander("🔍 Dettagli Errore (per debugging)"):
-                st.code(traceback.format_exc())
+    except Exception as e:
+        st.error(f"❌ Errore durante la simulazione: {str(e)}")
+        import traceback
+        with st.expander("🔍 Dettagli Errore (per debugging)"):
+            st.code(traceback.format_exc())
         
-        finally:
-            # Cleanup progress indicators
-            progress_container.empty()
+    finally:
+        # Cleanup progress indicators
+        progress_container.empty()
 
 if __name__ == "__main__":
     main()
