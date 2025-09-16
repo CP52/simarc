@@ -101,7 +101,7 @@ class SimulationParams:
     
     # Parametri bersaglio
     target_distance: float        # [m]
-    params.target_height: float          # [m]
+    target_height: float          # [m]
     
     # Velocità
     use_measured_v0: bool
@@ -505,7 +505,7 @@ def interpolate_trajectory_point(X: np.ndarray, Y: np.ndarray, x_target: float,
 def find_optimal_firing_angle(params: SimulationParams, integrator: AdvancedRK4Integrator,
                              method: str = 'brent') -> Tuple[float, float]:
     """Ricerca angolo ottimale con algoritmi robusti"""
-    params.target_height = params.target_height
+    target_height= params.target_height
     target_distance = params.target_distance
 
     def objective_function(angle_deg):
@@ -527,7 +527,7 @@ def find_optimal_firing_angle(params: SimulationParams, integrator: AdvancedRK4I
 
     # Stima iniziale fisica
     v0_est = calculate_velocity_enhanced(params)
-    h_diff = params.params.target_height - params.launch_height
+    h_diff = params.target_height - params.launch_height
     
     # Formula balistica approssimata con correzione drag
     try:
@@ -1454,7 +1454,7 @@ def main():
         
         st.markdown("### 🎯 Parametri Bersaglio")
         target_distance = st.number_input("Distanza (m)", 5.0, 100.0, 40.0, step=1.0)
-        params.target_height = st.number_input("Altezza (m)", -10.0, 10.0, 1.4, step=0.1)
+        target_height= st.number_input("Altezza (m)", -10.0, 10.0, 1.4, step=0.1)
         
         st.markdown("### ⚡ Velocità")
         use_measured_v0 = st.checkbox("Usa velocità misurata", 
@@ -1496,7 +1496,7 @@ def main():
                 efficiency=efficiency, bow_type=bow_type,
                 launch_height_neutral=launch_height_neutral,
                 anchor_length=anchor_length, pelvis_height=pelvis_height, eye_offset_v=eye_offset_v,
-                target_distance=target_distance, params.target_height=params.target_height,
+                target_distance=target_distance, target_height=params.target_height,
                 use_measured_v0=use_measured_v0, v0=v0_measured,
                 wind_speed=wind_speed, air_temperature=air_temperature,
                 air_pressure=air_pressure, humidity=humidity, altitude=altitude
@@ -1635,7 +1635,7 @@ def main():
             metrics_cols = st.columns(5)
             
             with metrics_cols[0]:
-                direct_angle = np.degrees(np.arctan2(params.params.target_height - params.launch_height, 
+                direct_angle = np.degrees(np.arctan2(params.target_height - params.launch_height, 
                                                    target_distance))
                 st.metric("Angolo Ottimale", f"{optimal_angle:.2f}°",
                          delta=f"{optimal_angle - direct_angle:+.2f}°")
@@ -2005,7 +2005,7 @@ def display_enhanced_metrics(main_result, params, optimal_angle, target_distance
     
     # Calcoli preliminari
     mass_kg = params.mass / 1000.0
-    direct_angle = np.degrees(np.arctan2(params.params.target_height - params.launch_height, target_distance))
+    direct_angle = np.degrees(np.arctan2(params.target_height - params.launch_height, target_distance))
     
     # NUOVO: Calcola energia residua al bersaglio
     v_x_target = interpolate_trajectory_point(main_result.X, main_result.V_x, target_distance)
@@ -2053,7 +2053,7 @@ def create_enhanced_summary(main_result, params, optimal_angle, target_distance)
     initial_kinetic_energy = 0.5 * mass_kg * main_result.v0**2
     
     # Altri calcoli esistenti
-    direct_angle = np.degrees(np.arctan2(params.params.target_height - params.launch_height, target_distance))
+    direct_angle = np.degrees(np.arctan2(params.target_height - params.launch_height, target_distance))
     target_drop = (params.launch_height + np.tan(np.radians(optimal_angle)) * target_distance -
                   interpolate_trajectory_point(main_result.X, main_result.Y, target_distance)) * 100
     energy_retention = (v_final_at_target**2 / main_result.v0**2) * 100
