@@ -2184,7 +2184,7 @@ def export_comprehensive_analysis_with_energy(trajectory_result: TrajectoryResul
         output.seek(0)
         return output
 
-# Note tecniche finali
+            # Note tecniche finali
             with st.expander("📚 Note Tecniche e Limitazioni"):
                 st.markdown("""
                 **Modello Fisico:**
