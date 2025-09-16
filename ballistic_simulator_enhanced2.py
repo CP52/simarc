@@ -2185,30 +2185,30 @@ def export_comprehensive_analysis_with_energy(trajectory_result: TrajectoryResul
         return output
 
             # Note tecniche finali
-            with st.expander("📚 Note Tecniche e Limitazioni"):
-                st.markdown("""
-                **Modello Fisico:**
-                - Integrazione numerica RK4 con controllo adattivo dell'errore
-                - Modello aerodinamico basato su numero di Reynolds variabile
-                - Correzioni ambientali per densità aria (temperatura, pressione, umidità)
-                - Modello vento semplificato 2D (solo componente orizzontale)
-                
-                **Assunzioni:**
-                - Freccia considerata come corpo rigido puntiforme
-                - Traiettoria in piano verticale (no deriva laterale)
-                - Condizioni atmosferiche uniformi lungo la traiettoria
-                - Resistenza aria proporzionale al quadrato della velocità
-                
-                **Precisione:**
-                - Errore numerico controllato (tolleranza impostata)
-                - Validazione attraverso conservazione energia
-                - Confronto con modelli analitici semplificati
-                
-                **Applicabilità:**
-                - Tiro con l'arco sportivo e da caccia
-                - Distanze tipiche 10-100m
-                - Condizioni ambientali moderate
-                """)
+        with st.expander("📚 Note Tecniche e Limitazioni"):
+            st.markdown("""
+            **Modello Fisico:**
+            - Integrazione numerica RK4 con controllo adattivo dell'errore
+            - Modello aerodinamico basato su numero di Reynolds variabile
+            - Correzioni ambientali per densità aria (temperatura, pressione, umidità)
+            - Modello vento semplificato 2D (solo componente orizzontale)
+            
+            **Assunzioni:**
+            - Freccia considerata come corpo rigido puntiforme
+            - Traiettoria in piano verticale (no deriva laterale)
+            - Condizioni atmosferiche uniformi lungo la traiettoria
+            - Resistenza aria proporzionale al quadrato della velocità
+            
+            **Precisione:**
+            - Errore numerico controllato (tolleranza impostata)
+            - Validazione attraverso conservazione energia
+            - Confronto con modelli analitici semplificati
+            
+            **Applicabilità:**
+            - Tiro con l'arco sportivo e da caccia
+            - Distanze tipiche 10-100m
+            - Condizioni ambientali moderate
+            """)
             
         except Exception as e:
             st.error(f"❌ Errore durante la simulazione: {str(e)}")
