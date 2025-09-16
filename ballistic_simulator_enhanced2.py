@@ -848,12 +848,15 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     ax_traj.legend(loc='upper right', framealpha=0.9, fontsize=10)
     
     # Titolo informativo
-    title = (f"Simulazione Balistica Avanzata - Integrazione RK4 Adattiva
-"
-            f"Angolo: {main_result.angle_degrees:.2f}° | "
-            f"v₀: {main_result.v0:.1f} m/s | "
-            f"Tempo volo: {main_result.flight_time:.2f} s | "
-            f"Altezza max: {main_result.max_height:.1f} m")
+    title = (
+        f"Simulazione Balistica Avanzata - Integrazione RK4 Adattiva\n"
+        f"Angolo: {main_result.angle_degrees:.2f}° | "
+        f"v₀: {main_result.v0:.1f} m/s | "
+        f"Tempo volo: {main_result.flight_time:.2f} s | "
+        f"Altezza max: {main_result.max_height:.1f} m"
+    )
+    ax_traj.set_title(title, fontsize=14, pad=20, fontweight='bold')
+
     ax_traj.set_title(title, fontsize=14, pad=20, fontweight='bold')
     
     # ===== LIMITI ASSI CORRETTI =====
