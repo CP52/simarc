@@ -27,9 +27,7 @@ warnings.filterwarnings('ignore')
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ==============================
 # CONFIGURAZIONE E COSTANTI FISICHE
-# ==============================
 class PhysicalConstants:
     """Costanti fisiche aggiornate secondo letteratura scientifica"""
     G = 9.80665  # Accelerazione gravitazionale standard [m/s²]
@@ -72,9 +70,7 @@ BOW_TYPE_DEFAULT_EFF = {
     "hunting_recurve": 0.86   # Ricurvo da caccia ottimizzato
 }
 
-# ==============================
 # CLASSI DATI CON VALIDAZIONE AVANZATA
-# ==============================
 @dataclass
 class SimulationParams:
     """Parametri simulazione con validazione scientifica rigorosa"""
@@ -172,9 +168,7 @@ class TrajectoryResults:
     energy_loss: float = 0.0  # Perdita energia [J]
     stability_factor: float = 1.0  # Fattore stabilità
 
-# ==============================
 # MODELLO AERODINAMICO AVANZATO
-# ==============================
 #@lru_cache(maxsize=2000)
 def calculate_air_density(temp_c: float, pressure_hpa: float, humidity_pct: float) -> float:
     """Calcola densità aria con correzione umidità (ASHRAE, 2017)"""
@@ -260,9 +254,7 @@ def calculate_velocity_enhanced(params: SimulationParams) -> float:
     v0 = np.sqrt(max(1.0, 2 * E_stored / mass_kg)) * initial_drag_correction
     return min(v0, 150.0)  # Limite fisico realistico
 
-# ==============================
 # INTEGRATORE RK4 CON MODELLO VENTO 3D SEMPLIFICATO
-# ==============================
 class AdvancedRK4Integrator:
     """Integratore RK4 con controllo adattivo e modello fisico completo"""
     
@@ -470,9 +462,7 @@ class AdvancedRK4Integrator:
             energy_loss=energy_loss
         )
 
-# ==============================
 # FUNZIONI MATEMATICHE DI SUPPORTO
-# ==============================
 def interpolate_trajectory_point(X: np.ndarray, Y: np.ndarray, x_target: float,
                                 method: str = 'cubic', extrapolate: bool = False) -> float:
     """Interpolazione robusta punti traiettoria"""
@@ -569,10 +559,7 @@ def find_optimal_firing_angle(params: SimulationParams, integrator: AdvancedRK4I
         
         return angles_test[best_idx], errors[best_idx]
 
-# ==============================
 # SISTEMA GENERAZIONE MIRINO AVANZATO
-# ==============================
-
 class SightScalePDFGenerator:
     """Generatore PDF scala mirino con layout professionale"""
     
@@ -752,9 +739,7 @@ def esporta_mirino_pdf_bytes(df_proj: pd.DataFrame, o_eye_cock: float,
     return buf, filename
 
 
-# ==============================
 # VISUALIZZAZIONE GRAFICA AVANZATA
-# ==============================
 def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
                                         params: SimulationParams,
                                         no_drag_result: Optional[TrajectoryResults] = None,
@@ -770,7 +755,6 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     ax_energy = fig.add_subplot(gs[1, 1])
     ax_drop = fig.add_subplot(gs[2, :])
     
-    # === GRAFICO PRINCIPALE TRAIETTORIA ===
     X1, Y1 = main_result.X, main_result.Y
     
     # Traiettoria realistica
@@ -790,9 +774,7 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
                    marker='o', label="Bersaglio", 
                    edgecolors='black', linewidth=2, zorder=10)
     
-    # ===== CORREZIONE PRINCIPALE: CALCOLO LIMITI CONSIDERANDO LINEA DI MIRA =====
-    
-    # Calcola punto di impatto teorico della linea di mira (dove y=0 o al bersaglio)
+        # Calcola punto di impatto teorico della linea di mira (dove y=0 o al bersaglio)
     y0 = params.launch_height
     angle_rad = np.radians(main_result.angle_degrees)
     
@@ -825,20 +807,18 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     ax_traj.plot(x_sight, y_sight, color=PLOT_CONFIG['colors']['danger'],
                 linestyle=':', linewidth=2, label="Linea di mira", alpha=0.8)
     
-    # ===== FINE CORREZIONE =====
-    
-    # Drop al bersaglio
+        # Drop al bersaglio
     # Limite Y robusto: include suolo, lancio, bersaglio e apice
-y_impact = interpolate_trajectory_point(X1, Y1, params.target_distance)
-y_bot_candidates = [0.0, Y1.min() if len(Y1)>0 else 0.0, y_impact]
-y_top_candidates = [params.launch_height, params.target_height, Y1.max() if len(Y1)>0 else 0.0, y_impact]
-y_min_plot = float(min(y_bot_candidates))
-y_max_plot = float(max(y_top_candidates))
-# padding minimo
-pad = 0.05 * max(0.1, (y_max_plot - y_min_plot)) + 0.1
-if not (y_max_plot > y_min_plot):
-    y_min_plot, y_max_plot = -0.5, 1.5  # fallback sensato
-ax_traj.set_ylim(y_min_plot - pad, y_max_plot + pad)
+    y_impact = interpolate_trajectory_point(X1, Y1, params.target_distance)
+    y_bot_candidates = [0.0, Y1.min() if len(Y1)>0 else 0.0, y_impact]
+    y_top_candidates = [params.launch_height, params.target_height, Y1.max() if len(Y1)>0 else 0.0, y_impact]
+    y_min_plot = float(min(y_bot_candidates))
+    y_max_plot = float(max(y_top_candidates))
+    # padding minimo
+    pad = 0.05 * max(0.1, (y_max_plot - y_min_plot)) + 0.1
+    if not (y_max_plot > y_min_plot):
+        y_min_plot, y_max_plot = -0.5, 1.5  # fallback sensato
+    ax_traj.set_ylim(y_min_plot - pad, y_max_plot + pad)
     
         
     # Annotazione Drop (dopo aver impostato i limiti)
@@ -856,17 +836,15 @@ ax_traj.set_ylim(y_min_plot - pad, y_max_plot + pad)
             fontsize=11, fontweight='bold', clip_on=True
         )
     
-    # === RESTO DEL CODICE INVARIATO ===
-    # (grafici velocità, energia, drop rimangono identici)
+        # (grafici velocità, energia, drop rimangono identici)
     
-    # === GRAFICO VELOCITÀ ===
-    V_total = np.sqrt(main_result.V_x**2 + main_result.V_y**2)
+        V_total = np.sqrt(main_result.V_x**2 + main_result.V_y**2)
     ax_vel.plot(main_result.X, V_total, color=PLOT_CONFIG['colors']['success'], 
-               linewidth=2.5, label='Velocità totale')
+    linewidth=2.5, label='Velocità totale')
     ax_vel.plot(main_result.X, main_result.V_x, color=PLOT_CONFIG['colors']['primary'], 
-               linewidth=1.8, alpha=0.8, label='Componente X')
+    linewidth=1.8, alpha=0.8, label='Componente X')
     ax_vel.plot(main_result.X, main_result.V_y, color=PLOT_CONFIG['colors']['danger'], 
-               linewidth=1.8, alpha=0.8, label='Componente Y')
+    linewidth=1.8, alpha=0.8, label='Componente Y')
     
     ax_vel.set_xlabel("Distanza (m)", fontsize=11)
     ax_vel.set_ylabel("Velocità (m/s)", fontsize=11)
@@ -874,8 +852,7 @@ ax_traj.set_ylim(y_min_plot - pad, y_max_plot + pad)
     ax_vel.legend(fontsize=9)
     ax_vel.set_title("Profilo Velocità", fontsize=12, fontweight='bold')
     
-    # === GRAFICO ENERGIA ===
-    mass_kg = params.mass / 1000.0
+        mass_kg = params.mass / 1000.0
     kinetic_energy = 0.5 * mass_kg * V_total**2
     initial_energy = kinetic_energy[0]
     energy_retention = kinetic_energy / initial_energy * 100
@@ -892,8 +869,7 @@ ax_traj.set_ylim(y_min_plot - pad, y_max_plot + pad)
     ax_energy.set_title("Ritenzione Energia Cinetica", fontsize=12, fontweight='bold')
     ax_energy.set_ylim(70, 105)
     
-    # === GRAFICO DROP ===
-    # Calcola drop per range esteso
+        # Calcola drop per range esteso
     distances_drop = np.linspace(5, params.target_distance * 1.2, 50)
     drops_calculated = []
     
@@ -1002,9 +978,7 @@ def create_sight_scale_visualization(sight_data: pd.DataFrame, eye_to_nock: floa
     plt.tight_layout()
     return fig
 
-# ==============================
 # ANALISI MONTE CARLO AVANZATA
-# ==============================
 class MonteCarloAnalyzer:
     """Analizzatore statistico Monte Carlo per incertezze parametriche"""
     
@@ -1137,9 +1111,7 @@ class MonteCarloAnalyzer:
         
         return stats
 
-# ==============================
 # EXPORT DATI COMPLETO
-# ==============================
 def export_comprehensive_analysis(trajectory_result: TrajectoryResults,
                                  params: SimulationParams,
                                  sight_data: pd.DataFrame,
@@ -1250,9 +1222,7 @@ def export_comprehensive_analysis(trajectory_result: TrajectoryResults,
         output.seek(0)
         return output
 
-# ==============================
 # FUNZIONI DI SUPPORTO GEOMETRICO
-# ==============================
 def calculate_postural_launch_height(params: SimulationParams, angle_rad: float) -> float:
     """Calcola altezza lancio considerando postura dinamica arciere"""
     anchor_length = params.anchor_length
@@ -1302,9 +1272,7 @@ def iterative_angle_convergence(params: SimulationParams, integrator: AdvancedRK
     logger.warning(f"Convergenza non raggiunta dopo {max_iterations} iterazioni")
     return current_angle, current_height
 
-# ==============================
 # INTERFACCIA STREAMLIT PRINCIPALE
-# ==============================
 def main():
     st.set_page_config(
         page_title="Simulatore Balistico Avanzato con Mirino",
@@ -1578,8 +1546,7 @@ def main():
             progress_bar.progress(100)
             status_text.text("✅ Simulazione completata!")
             
-            # ===== VISUALIZZAZIONE RISULTATI =====
-            st.markdown("---")
+                        st.markdown("---")
             st.markdown("## 📊 Risultati Simulazione")
             
             # Metriche principali
@@ -1733,8 +1700,7 @@ def main():
                         mc_detailed_df = pd.DataFrame(mc_detailed_data)
                         st.dataframe(mc_detailed_df, use_container_width=True, hide_index=True)
             
-            # ===== EXPORT DATI =====
-            st.markdown("---")
+                        st.markdown("---")
             st.markdown("### 💾 Export e Download")
             
             export_cols = st.columns(4)
@@ -1826,8 +1792,7 @@ def main():
                     mime="application/json"
                 )
             
-            # ===== RIEPILOGO FINALE =====
-            st.markdown("---")
+                        st.markdown("---")
             st.markdown("### 📋 Riepilogo Esecutivo")
             
 
