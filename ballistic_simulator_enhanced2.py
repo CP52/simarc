@@ -862,7 +862,7 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     # ===== LIMITI ASSI CORRETTI =====
     
     # Limite X: usa il nuovo calcolo
-    ax_traj.set_xlim(0, x_max_final)
+    ax_traj.set_xlim(0, params.target_distance * 1.05)
     
     # Limiti Y: considera tutti i punti inclusa la linea di mira estesa
     y_elements = [
