@@ -829,16 +829,16 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     
     # Drop al bersaglio
     # Limite Y robusto: include suolo, lancio, bersaglio e apice
-    y_impact = interpolate_trajectory_point(X1, Y1, params.target_distance)
-    y_bot_candidates = [0.0, Y1.min() if len(Y1)>0 else 0.0, y_impact]
-    y_top_candidates = [params.launch_height, params.target_height, Y1.max() if len(Y1)>0 else 0.0, y_impact]
-    y_min_plot = float(min(y_bot_candidates))
-    y_max_plot = float(max(y_top_candidates))
-    # padding minimo
-    pad = 0.05 * max(0.1, (y_max_plot - y_min_plot)) + 0.1
-    if not (y_max_plot > y_min_plot):
-        y_min_plot, y_max_plot = -0.5, 1.5  # fallback sensato
-    ax_traj.set_ylim(y_min_plot - pad, y_max_plot + pad)
+y_impact = interpolate_trajectory_point(X1, Y1, params.target_distance)
+y_bot_candidates = [0.0, Y1.min() if len(Y1)>0 else 0.0, y_impact]
+y_top_candidates = [params.launch_height, params.target_height, Y1.max() if len(Y1)>0 else 0.0, y_impact]
+y_min_plot = float(min(y_bot_candidates))
+y_max_plot = float(max(y_top_candidates))
+# padding minimo
+pad = 0.05 * max(0.1, (y_max_plot - y_min_plot)) + 0.1
+if not (y_max_plot > y_min_plot):
+    y_min_plot, y_max_plot = -0.5, 1.5  # fallback sensato
+ax_traj.set_ylim(y_min_plot - pad, y_max_plot + pad)
     
         
     # Annotazione Drop (dopo aver impostato i limiti)
@@ -1851,32 +1851,33 @@ try:
 except Exception as _e:
     kinetic_energy_residual = float('nan')
                             try:
-            summary_data = {
-                'Parametro': [
-                    'Angolo di tiro ottimale', 'Velocità iniziale calcolata', 'Altezza di lancio effettiva',
-                    'Drop al bersaglio', 'Tempo di volo totale', 'Altezza massima raggiunta',
-                    'Gittata massima teorica', 'Ritenzione energia finale',
+            try:
+                summary_data = {
+                    'Parametro': [
+                        'Angolo di tiro ottimale', 'Velocità iniziale calcolata', 'Altezza di lancio effettiva',
+                        'Drop al bersaglio', 'Tempo di volo totale', 'Altezza massima raggiunta',
+                        'Gittata massima teorica', 'Ritenzione energia finale',
         'Energia residua all’impatto',
-                    'Efficienza integrazione numerica', 'Perdita energia aerodinamica'
-                ],
-                'Valore': [
-                    f"{optimal_angle:.3f}°", f"{main_result.v0:.2f} m/s", f"{params.launch_height:.3f} m",
-                    f"{target_drop:.2f} cm", f"{main_result.flight_time:.3f} s", f"{main_result.max_height:.2f} m",
-                    f"{main_result.range_distance:.1f} m", f"{energy_retention:.1f}%",
+                        'Efficienza integrazione numerica', 'Perdita energia aerodinamica'
+                    ],
+                    'Valore': [
+                        f"{optimal_angle:.3f}°", f"{main_result.v0:.2f} m/s", f"{params.launch_height:.3f} m",
+                        f"{target_drop:.2f} cm", f"{main_result.flight_time:.3f} s", f"{main_result.max_height:.2f} m",
+                        f"{main_result.range_distance:.1f} m", f"{energy_retention:.1f}%",
         f"{kinetic_energy_residual:.2f} J",
-                    f"{efficiency:.1f}%", f"{main_result.energy_loss:.2f} J"
-                ],
-                'Note Tecniche': [
-                    f"Scarto da mira diretta: {optimal_angle - direct_angle:+.2f}°",
-                    "Basata su modello energetico arco" if not use_measured_v0 else "Valore inserito dall'utente",
-                    "Corretta per geometria posturale arciere" if use_postural_correction else "Altezza neutra",
-                    f"Alla distanza di {target_distance}m dal punto di mira",
-                    f"Per coprire {target_distance}m di distanza orizzontale",
-                    "Apice della parabola balistica",
-                    "Distanza teorica impatto al suolo (y=0)",
-                    "Percentuale energia cinetica conservata",
-                    f"Passi RK4: {stats['steps']}, Rifiutati: {stats['rejections']}",
-                    "Energia dissipata per resistenza aerodinamica"
+                        f"{efficiency:.1f}%", f"{main_result.energy_loss:.2f} J"
+                    ],
+                    'Note Tecniche': [
+                        f"Scarto da mira diretta: {optimal_angle - direct_angle:+.2f}°",
+                        "Basata su modello energetico arco" if not use_measured_v0 else "Valore inserito dall'utente",
+                        "Corretta per geometria posturale arciere" if use_postural_correction else "Altezza neutra",
+                        f"Alla distanza di {target_distance}m dal punto di mira",
+                        f"Per coprire {target_distance}m di distanza orizzontale",
+                        "Apice della parabola balistica",
+                        "Distanza teorica impatto al suolo (y=0)",
+                        "Percentuale energia cinetica conservata",
+                        f"Passi RK4: {stats['steps']}, Rifiutati: {stats['rejections']}",
+                        "Energia dissipata per resistenza aerodinamica"
   
 
 except Exception as e:
@@ -1885,8 +1886,15 @@ except Exception as e:
         'Valore': [str(e)],
         'Note Tecniche': ['Variabile mancante nel riepilogo; verificare configurazione.']
     }
-              ]
-            }
+                  ]
+                }
+            except Exception as e:
+                summary_data = {
+                    'Parametro': ['Riepilogo ridotto per errore'],
+                    'Valore': [str(e)],
+                    'Note Tecniche': ['Variabile mancante nel riepilogo; verificare configurazione.']
+                }
+
             
             summary_df = pd.DataFrame(summary_data)
             st.dataframe(summary_df, use_container_width=True, hide_index=True)
