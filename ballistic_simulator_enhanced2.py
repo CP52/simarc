@@ -829,16 +829,16 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     
     # Drop al bersaglio
     # Limite Y robusto: include suolo, lancio, bersaglio e apice
-y_impact = interpolate_trajectory_point(X1, Y1, params.target_distance)
-y_bot_candidates = [0.0, Y1.min() if len(Y1)>0 else 0.0, y_impact]
-y_top_candidates = [params.launch_height, params.target_height, Y1.max() if len(Y1)>0 else 0.0, y_impact]
-y_min_plot = float(min(y_bot_candidates))
-y_max_plot = float(max(y_top_candidates))
-# padding minimo
-pad = 0.05 * max(0.1, (y_max_plot - y_min_plot)) + 0.1
-if not (y_max_plot > y_min_plot):
-    y_min_plot, y_max_plot = -0.5, 1.5  # fallback sensato
-ax_traj.set_ylim(y_min_plot - pad, y_max_plot + pad)
+    y_impact = interpolate_trajectory_point(X1, Y1, params.target_distance)
+    y_bot_candidates = [0.0, Y1.min() if len(Y1)>0 else 0.0, y_impact]
+    y_top_candidates = [params.launch_height, params.target_height, Y1.max() if len(Y1)>0 else 0.0, y_impact]
+    y_min_plot = float(min(y_bot_candidates))
+    y_max_plot = float(max(y_top_candidates))
+    # padding minimo
+    pad = 0.05 * max(0.1, (y_max_plot - y_min_plot)) + 0.1
+    if not (y_max_plot > y_min_plot):
+        y_min_plot, y_max_plot = -0.5, 1.5  # fallback sensato
+    ax_traj.set_ylim(y_min_plot - pad, y_max_plot + pad)
     
         
     # Annotazione Drop (dopo aver impostato i limiti)
