@@ -828,52 +828,17 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     # ===== FINE CORREZIONE =====
     
     # Drop al bersaglio
-    y_impact = interpolate_trajectory_point(X1, Y1, params.target_distance)
-    y_sight_target = y0 + np.tan(angle_rad) * params.target_distance
-    drop_cm = (y_sight_target - y_impact) * 100.0
-    
-    # Info vento
-    if abs(params.wind_speed) > 0.1 and show_wind:
-        wind_desc = "favorevole" if params.wind_speed > 0 else "contrario"
-        wind_text = f"Vento: {params.wind_speed:+.1f} m/s ({wind_desc})"
-        ax_traj.text(0.02, 0.98, wind_text, transform=ax_traj.transAxes,
-                    bbox=dict(boxstyle="round,pad=0.4", 
-                            facecolor=PLOT_CONFIG['colors']['info'], alpha=0.8),
-                    fontsize=11, verticalalignment='top', color='white')
-    
-    # Stile grafico principale
-    ax_traj.set_xlabel("Distanza (m)", fontsize=12, fontweight='bold')
-    ax_traj.set_ylabel("Altezza (m)", fontsize=12, fontweight='bold')
-    ax_traj.grid(True, alpha=0.3, linestyle='-', linewidth=0.5)
-    ax_traj.legend(loc='upper right', framealpha=0.9, fontsize=10)
-    
-    # Titolo informativo
-    title = (
-        f"Simulazione Balistica Avanzata - Integrazione RK4 Adattiva\n"
-        f"Angolo: {main_result.angle_degrees:.2f}° | "
-        f"v₀: {main_result.v0:.1f} m/s | "
-        f"Tempo volo: {main_result.flight_time:.2f} s | "
-        f"Altezza max: {main_result.max_height:.1f} m"
-    )
-    ax_traj.set_title(title, fontsize=14, pad=20, fontweight='bold')
-
-    ax_traj.set_title(title, fontsize=14, pad=20, fontweight='bold')
-    
-    # ===== LIMITI ASSI CORRETTI =====
-    
-    # Limite X: usa il nuovo calcolo
-    ax_traj.set_xlim(0, params.target_distance * 1.05)
-    # Limite Y dinamico basato su y_impact
-    y_impact = interpolate_trajectory_point(X1, Y1, params.target_distance)
-    if params.target_height >= y0:
-        # Tiro piano o verso l'alto
-        y_min_plot = min(0.0, y_impact, Y1.min()) - 0.2*abs(y_impact)
-        y_max_plot = max(main_result.max_height, y0, params.target_height) * 1.1
-    else:
-        # Tiro verso il basso
-        y_min_plot = min(y_impact, Y1.min()) - 0.2*abs(y_impact)
-        y_max_plot = max(y0, params.target_height) * 1.1
-    ax_traj.set_ylim(y_min_plot, y_max_plot)
+    # Limite Y robusto: include suolo, lancio, bersaglio e apice
+y_impact = interpolate_trajectory_point(X1, Y1, params.target_distance)
+y_bot_candidates = [0.0, Y1.min() if len(Y1)>0 else 0.0, y_impact]
+y_top_candidates = [params.launch_height, params.target_height, Y1.max() if len(Y1)>0 else 0.0, y_impact]
+y_min_plot = float(min(y_bot_candidates))
+y_max_plot = float(max(y_top_candidates))
+# padding minimo
+pad = 0.05 * max(0.1, (y_max_plot - y_min_plot)) + 0.1
+if not (y_max_plot > y_min_plot):
+    y_min_plot, y_max_plot = -0.5, 1.5  # fallback sensato
+ax_traj.set_ylim(y_min_plot - pad, y_max_plot + pad)
     
         
     # Annotazione Drop (dopo aver impostato i limiti)
@@ -1875,7 +1840,18 @@ def main():
                 kinetic_energy_residual = 0.5 * mass_kg * v_final_at_target**2
             except Exception as _e:
                 kinetic_energy_residual = float('nan')
-                summary_data = {
+
+# Energia cinetica residua all'impatto (calcolata prima del riepilogo)
+try:
+    _mass_kg = params.mass / 1000.0
+    _vx_t = interpolate_trajectory_point(main_result.X, main_result.V_x, params.target_distance)
+    _vy_t = interpolate_trajectory_point(main_result.X, main_result.V_y, params.target_distance)
+    _v_final_at_target = float((_vx_t**2 + _vy_t**2) ** 0.5)
+    kinetic_energy_residual = 0.5 * _mass_kg * _v_final_at_target**2
+except Exception as _e:
+    kinetic_energy_residual = float('nan')
+                            try:
+            summary_data = {
                 'Parametro': [
                     'Angolo di tiro ottimale', 'Velocità iniziale calcolata', 'Altezza di lancio effettiva',
                     'Drop al bersaglio', 'Tempo di volo totale', 'Altezza massima raggiunta',
@@ -1901,7 +1877,15 @@ def main():
                     "Percentuale energia cinetica conservata",
                     f"Passi RK4: {stats['steps']}, Rifiutati: {stats['rejections']}",
                     "Energia dissipata per resistenza aerodinamica"
-                ]
+  
+
+except Exception as e:
+    summary_data = {
+        'Parametro': ['Riepilogo ridotto per errore'],
+        'Valore': [str(e)],
+        'Note Tecniche': ['Variabile mancante nel riepilogo; verificare configurazione.']
+    }
+              ]
             }
             
             summary_df = pd.DataFrame(summary_data)
