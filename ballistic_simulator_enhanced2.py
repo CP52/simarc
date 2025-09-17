@@ -863,17 +863,6 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     
     # Limite X: usa il nuovo calcolo
     ax_traj.set_xlim(0, params.target_distance * 1.05)
-    # Limite Y dinamico basato su y_impact
-    y_impact = interpolate_trajectory_point(X1, Y1, params.target_distance)
-    if params.target_height >= y0:
-        # Tiro piano o verso l'alto
-        y_min_plot = min(0.0, y_impact, Y1.min()) - 0.2*abs(y_impact)
-        y_max_plot = max(main_result.max_height, y0, params.target_height) * 1.1
-    else:
-        # Tiro verso il basso
-        y_min_plot = min(y_impact, Y1.min()) - 0.2*abs(y_impact)
-        y_max_plot = max(y0, params.target_height) * 1.1
-    ax_traj.set_ylim(y_min_plot, y_max_plot)
     
     # Limiti Y: considera tutti i punti inclusa la linea di mira estesa
     y_elements = [
