@@ -863,35 +863,19 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     
     # Limite X: usa il nuovo calcolo
     ax_traj.set_xlim(0, params.target_distance * 1.05)
-    
-    # Limiti Y: considera tutti i punti inclusa la linea di mira estesa
-    y_elements = [
-        Y1.min() if len(Y1) > 0 else 0, 
-        Y1.max() if len(Y1) > 0 else 0, 
-        params.target_height, 
-        y0, 
-        y_sight_target,
-        y_sight[1]  # Punto finale linea di mira estesa
-    ]
-    
-    if no_drag_result:
-        y_elements.extend([no_drag_result.Y.min(), no_drag_result.Y.max()])
-    
-    y_min_all = min(y_elements)
-    y_max_all = max(y_elements)
-    
-    # Logica limiti Y migliorata
+    # Limite Y dinamico basato su y_impact
+    y_impact = interpolate_trajectory_point(X1, Y1, params.target_distance)
     if params.target_height >= y0:
-        # Tiro in piano o verso l'alto
-        y_min_plot = min(0.0, y_min_all - 0.5)
-        y_max_plot = y_max_all + 1.0
+        # Tiro piano o verso l'alto
+        y_min_plot = min(0.0, y_impact, Y1.min()) - 0.2*abs(y_impact)
+        y_max_plot = max(main_result.max_height, y0, params.target_height) * 1.1
     else:
         # Tiro verso il basso
-        y_min_plot = y_min_all - 1.0
-        y_max_plot = max(y0, y_max_all) + 0.5
-    
+        y_min_plot = min(y_impact, Y1.min()) - 0.2*abs(y_impact)
+        y_max_plot = max(y0, params.target_height) * 1.1
     ax_traj.set_ylim(y_min_plot, y_max_plot)
     
+        
     # Annotazione Drop (dopo aver impostato i limiti)
     if abs(drop_cm) > 0.5:
         y_center = 0.5 * (y_min_plot + y_max_plot)
@@ -1881,7 +1865,17 @@ def main():
             st.markdown("---")
             st.markdown("### 📋 Riepilogo Esecutivo")
             
-            summary_data = {
+
+            # Energia cinetica residua all'impatto
+            try:
+                mass_kg = params.mass / 1000.0
+                v_x_target = interpolate_trajectory_point(main_result.X, main_result.V_x, target_distance)
+                v_y_target = interpolate_trajectory_point(main_result.X, main_result.V_y, target_distance)
+                v_final_at_target = float((v_x_target**2 + v_y_target**2) ** 0.5)
+                kinetic_energy_residual = 0.5 * mass_kg * v_final_at_target**2
+            except Exception as _e:
+                kinetic_energy_residual = float('nan')
+                summary_data = {
                 'Parametro': [
                     'Angolo di tiro ottimale', 'Velocità iniziale calcolata', 'Altezza di lancio effettiva',
                     'Drop al bersaglio', 'Tempo di volo totale', 'Altezza massima raggiunta',
