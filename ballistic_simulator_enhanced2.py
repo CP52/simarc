@@ -852,7 +852,7 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     ax_vel.legend(fontsize=9)
     ax_vel.set_title("Profilo Velocità", fontsize=12, fontweight='bold')
     
-        mass_kg = params.mass / 1000.0
+    mass_kg = params.mass / 1000.0
     kinetic_energy = 0.5 * mass_kg * V_total**2
     initial_energy = kinetic_energy[0]
     energy_retention = kinetic_energy / initial_energy * 100
