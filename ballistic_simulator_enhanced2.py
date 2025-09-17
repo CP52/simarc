@@ -1546,7 +1546,7 @@ def main():
             progress_bar.progress(100)
             status_text.text("✅ Simulazione completata!")
             
-                        st.markdown("---")
+            st.markdown("---")
             st.markdown("## 📊 Risultati Simulazione")
             
             # Metriche principali
