@@ -862,7 +862,7 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     # ===== LIMITI ASSI CORRETTI =====
     
     # Limite X: usa il nuovo calcolo
-    ax_traj.set_xlim(0, target_distance * 1.05)
+    ax_traj.set_xlim(0, x_max_final)
     
     # Limiti Y: considera tutti i punti inclusa la linea di mira estesa
     y_elements = [
@@ -1496,7 +1496,7 @@ def main():
                 efficiency=efficiency, bow_type=bow_type,
                 launch_height_neutral=launch_height_neutral,
                 anchor_length=anchor_length, pelvis_height=pelvis_height, eye_offset_v=eye_offset_v,
-                target_distance=target_distance, target_height=params.target_height,
+                target_distance=target_distance, target_height=target_height,
                 use_measured_v0=use_measured_v0, v0=v0_measured,
                 wind_speed=wind_speed, air_temperature=air_temperature,
                 air_pressure=air_pressure, humidity=humidity, altitude=altitude
