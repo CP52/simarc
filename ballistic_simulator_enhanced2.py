@@ -1792,7 +1792,7 @@ def main():
                     mime="application/json"
                 )
             
-                        st.markdown("---")
+            st.markdown("---")
             st.markdown("### 📋 Riepilogo Esecutivo")
             
 
