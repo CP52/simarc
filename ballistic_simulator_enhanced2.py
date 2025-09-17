@@ -1496,7 +1496,7 @@ def main():
                 efficiency=efficiency, bow_type=bow_type,
                 launch_height_neutral=launch_height_neutral,
                 anchor_length=anchor_length, pelvis_height=pelvis_height, eye_offset_v=eye_offset_v,
-                target_distance=target_distance, target_height=target_height,
+                target_distance=target_distance, target_height=params.target_height,
                 use_measured_v0=use_measured_v0, v0=v0_measured,
                 wind_speed=wind_speed, air_temperature=air_temperature,
                 air_pressure=air_pressure, humidity=humidity, altitude=altitude
@@ -1886,12 +1886,14 @@ def main():
                     'Angolo di tiro ottimale', 'Velocità iniziale calcolata', 'Altezza di lancio effettiva',
                     'Drop al bersaglio', 'Tempo di volo totale', 'Altezza massima raggiunta',
                     'Gittata massima teorica', 'Ritenzione energia finale',
+        'Energia residua all’impatto',
                     'Efficienza integrazione numerica', 'Perdita energia aerodinamica'
                 ],
                 'Valore': [
                     f"{optimal_angle:.3f}°", f"{main_result.v0:.2f} m/s", f"{params.launch_height:.3f} m",
                     f"{target_drop:.2f} cm", f"{main_result.flight_time:.3f} s", f"{main_result.max_height:.2f} m",
                     f"{main_result.range_distance:.1f} m", f"{energy_retention:.1f}%",
+        f"{kinetic_energy_residual:.2f} J",
                     f"{efficiency:.1f}%", f"{main_result.energy_loss:.2f} J"
                 ],
                 'Note Tecniche': [
@@ -2071,6 +2073,7 @@ def create_enhanced_summary(main_result, params, optimal_angle, target_distance)
             'Tempo di volo totale', 
             'Altezza massima raggiunta',
             'Gittata massima teorica',
+        'Energia residua all’impatto',
             'Energia cinetica iniziale',           # NUOVO
             'Energia cinetica residua',           # NUOVO
             'Velocità residua al bersaglio',      # NUOVO
@@ -2086,6 +2089,7 @@ def create_enhanced_summary(main_result, params, optimal_angle, target_distance)
             f"{main_result.flight_time:.3f} s", 
             f"{main_result.max_height:.2f} m",
             f"{main_result.range_distance:.1f} m",
+        f"{kinetic_energy_residual:.2f} J",
             f"{initial_kinetic_energy:.1f} J",           # NUOVO
             f"{kinetic_energy_residual:.1f} J",         # NUOVO
             f"{v_final_at_target:.2f} m/s",             # NUOVO
