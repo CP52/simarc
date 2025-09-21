@@ -972,6 +972,17 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     
     plt.tight_layout()
     return fig
+
+def create_sight_scale_visualization(sight_data: pd.DataFrame, eye_to_nock: float, nock_to_riser: float, laser_distance: float = 30.0) -> plt.Figure:
+    """Visualizzazione scala mirino interattiva"""
+    
+    fig, ax = plt.subplots(figsize=(6, 10))
+    
+    if len(sight_data) == 0:
+        ax.text(0.5, 0.5, "Nessun dato disponibile", 
+               transform=ax.transAxes, ha='center', va='center',
+               fontsize=14, color='red')
+        return fig
     
     # Estrai dati
     distances = sight_data['Distanza (m)'].values
