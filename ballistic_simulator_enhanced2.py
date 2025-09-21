@@ -809,6 +809,10 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     # Drop al bersaglio
     # Limite Y robusto: include suolo, lancio, bersaglio e apice
     y_impact = interpolate_trajectory_point(X1, Y1, params.target_distance)
+    y_sight_at_target = y0 + np.tan(angle_rad) * params.target_distance
+    drop_cm = (y_sight_at_target - y_impact) * 100  # Drop in cm al bersaglio
+    
+    # Limite Y robusto: include suolo, lancio, bersaglio e apice
     y_bot_candidates = [0.0, Y1.min() if len(Y1)>0 else 0.0, y_impact]
     y_top_candidates = [params.launch_height, params.target_height, Y1.max() if len(Y1)>0 else 0.0, y_impact]
     y_min_plot = float(min(y_bot_candidates))
