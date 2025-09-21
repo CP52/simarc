@@ -495,7 +495,7 @@ def interpolate_trajectory_point(X: np.ndarray, Y: np.ndarray, x_target: float,
 def find_optimal_firing_angle(params: SimulationParams, integrator: AdvancedRK4Integrator,
                              method: str = 'brent') -> Tuple[float, float]:
     """Ricerca angolo ottimale con algoritmi robusti"""
-    target_height= params.target_height
+    target_height = params.target_height
     target_distance = params.target_distance
 
     def objective_function(angle_deg):
@@ -648,11 +648,10 @@ class SightScalePDFGenerator:
         story.append(sight_table)
         story.append(Spacer(1, 1*cm))
         
-        
         notes_text = """
         <b>Note Tecniche:</b><br/>
         • I valori sono calcolati per le condizioni ambientali specificate<br/>
-        • La scala è ottimizzata per il setup geometrico dell'arciere<br/>
+        • La scala è ottimizzata per el setup geometrico dell'arciere<br/>
         • Verificare periodicamente la taratura con tiri di prova<br/>
         • Valori positivi = sopra il punto zero, negativi = sotto<br/>
         """
@@ -774,7 +773,7 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
                    marker='o', label="Bersaglio", 
                    edgecolors='black', linewidth=2, zorder=10)
     
-        # Calcola punto di impatto teorico della linea di mira (dove y=0 o al bersaglio)
+    # Calcola punto di impatto teorico della linea di mira (dove y=0 o al bersaglio)
     y0 = params.launch_height
     angle_rad = np.radians(main_result.angle_degrees)
     
@@ -807,7 +806,7 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     ax_traj.plot(x_sight, y_sight, color=PLOT_CONFIG['colors']['danger'],
                 linestyle=':', linewidth=2, label="Linea di mira", alpha=0.8)
     
-        # Drop al bersaglio
+    # Drop al bersaglio
     # Limite Y robusto: include suolo, lancio, bersaglio e apice
     y_impact = interpolate_trajectory_point(X1, Y1, params.target_distance)
     y_bot_candidates = [0.0, Y1.min() if len(Y1)>0 else 0.0, y_impact]
@@ -820,8 +819,8 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
         y_min_plot, y_max_plot = -0.5, 1.5  # fallback sensato
     ax_traj.set_ylim(y_min_plot - pad, y_max_plot + pad)
     
-        
     # Annotazione Drop (dopo aver impostato i limiti)
+    drop_cm = (y_sight[1] - y_impact) * 100
     if abs(drop_cm) > 0.5:
         y_center = 0.5 * (y_min_plot + y_max_plot)
         offset = -1.0 if y_impact > y_center else 1.0
@@ -836,15 +835,14 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
             fontsize=11, fontweight='bold', clip_on=True
         )
     
-        # (grafici velocità, energia, drop rimangono identici)
-    
-        V_total = np.sqrt(main_result.V_x**2 + main_result.V_y**2)
+    # Grafici velocità, energia, drop
+    V_total = np.sqrt(main_result.V_x**2 + main_result.V_y**2)
     ax_vel.plot(main_result.X, V_total, color=PLOT_CONFIG['colors']['success'], 
-    linewidth=2.5, label='Velocità totale')
+               linewidth=2.5, label='Velocità totale')
     ax_vel.plot(main_result.X, main_result.V_x, color=PLOT_CONFIG['colors']['primary'], 
-    linewidth=1.8, alpha=0.8, label='Componente X')
+               linewidth=1.8, alpha=0.8, label='Componente X')
     ax_vel.plot(main_result.X, main_result.V_y, color=PLOT_CONFIG['colors']['danger'], 
-    linewidth=1.8, alpha=0.8, label='Componente Y')
+               linewidth=1.8, alpha=0.8, label='Componente Y')
     
     ax_vel.set_xlabel("Distanza (m)", fontsize=11)
     ax_vel.set_ylabel("Velocità (m/s)", fontsize=11)
@@ -869,7 +867,7 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     ax_energy.set_title("Ritenzione Energia Cinetica", fontsize=12, fontweight='bold')
     ax_energy.set_ylim(70, 105)
     
-        # Calcola drop per range esteso
+    # Calcola drop per range esteso
     distances_drop = np.linspace(5, params.target_distance * 1.2, 50)
     drops_calculated = []
     
@@ -946,10 +944,7 @@ def create_sight_scale_visualization(sight_data: pd.DataFrame, eye_to_nock: floa
                va='center', ha='left' if side > 0 else 'right',
                fontsize=9, style='italic', alpha=0.7)
 
-
-    # ---- Laser geometrico: raggio dalla punta della freccia ----
-    # Usa la stessa geometria del PDF: y_cm(x, o, t, d=0) dove
-    #   o = eye_to_nock, t = nock_to_riser, x = laser_distance (m)
+    # Laser geometrico: raggio dalla punta della freccia
     def _y_cm(x: float, o: float, t: float, d: float = 0.0) -> float:
         u = (o + d) / (t + x)
         y_calc = 100.0 * x * (u / np.sqrt(1 + u**2))  # cm sul riser
@@ -968,7 +963,6 @@ def create_sight_scale_visualization(sight_data: pd.DataFrame, eye_to_nock: floa
 
     # Stile grafico
     ax.set_xlim(-5, 5)
-
     ax.set_ylabel("Posizione su Riser (cm)", fontsize=14, fontweight='bold')
     ax.set_title("Scala Mirino Verticale", fontsize=16, fontweight='bold', pad=20)
     ax.grid(True, axis='y', linestyle='--', alpha=0.4)
@@ -1272,6 +1266,216 @@ def iterative_angle_convergence(params: SimulationParams, integrator: AdvancedRK
     logger.warning(f"Convergenza non raggiunta dopo {max_iterations} iterazioni")
     return current_angle, current_height
 
+class SightingSystemCalculator:
+    """Calcolatore sistema di mira con geometria 3D completa"""
+    
+    def __init__(self, eye_to_nock: float, nock_to_riser: float):
+        self.eye_to_nock = eye_to_nock
+        self.nock_to_riser = nock_to_riser
+        self.sight_radius = eye_to_nock + nock_to_riser
+    
+    def calculate_sight_projection(self, distance: float, drop_meters: float) -> float:
+        """Calcola proiezione su riser considerando drop"""
+        horizontal_distance = distance
+        vertical_offset = drop_meters
+        
+        correction_angle = np.arctan(vertical_offset / horizontal_distance) if horizontal_distance > 0 else 0
+        
+        projection_m = horizontal_distance * (self.eye_to_nock + vertical_offset) / (self.nock_to_riser + horizontal_distance)
+        projection_cm = projection_m * 100.0 - vertical_offset * 100.0
+        
+        return projection_cm
+    
+    def generate_sight_marks(self, distances: np.ndarray, drops_cm: np.ndarray, 
+                           trajectory_result: TrajectoryResults, mass_g: float) -> pd.DataFrame:
+        """Genera tacche mirino per distanze specifiche CON ENERGIA RESIDUA"""
+        sight_data = []
+        mass_kg = mass_g / 1000.0
+        
+        for dist, drop_cm in zip(distances, drops_cm):
+            if not np.isnan(drop_cm):
+                drop_m = drop_cm / 100.0
+                projection = self.calculate_sight_projection(dist, drop_m)
+                
+                # Calcola energia cinetica residua
+                v_x_at_dist = interpolate_trajectory_point(trajectory_result.X, trajectory_result.V_x, dist)
+                v_y_at_dist = interpolate_trajectory_point(trajectory_result.X, trajectory_result.V_y, dist)
+                v_total_at_dist = np.sqrt(v_x_at_dist**2 + v_y_at_dist**2)
+                kinetic_energy = 0.5 * mass_kg * v_total_at_dist**2
+                
+                sight_data.append({
+                    'Distanza (m)': int(dist),
+                    'Drop (cm)': round(drop_cm, 1),
+                    'Proiezione riser (cm)': round(projection, 2),
+                    'Energia (J)': round(kinetic_energy, 1),
+                    'Velocità (m/s)': round(v_total_at_dist, 1)
+                })
+        
+        return pd.DataFrame(sight_data)
+
+def display_enhanced_metrics(main_result, params, optimal_angle, target_distance):
+    """Visualizza metriche principali con energia residua"""
+    
+    # Calcoli preliminari
+    mass_kg = params.mass / 1000.0
+    direct_angle = np.degrees(np.arctan2(params.target_height - params.launch_height, target_distance))
+    
+    # Calcola energia residua al bersaglio
+    v_x_target = interpolate_trajectory_point(main_result.X, main_result.V_x, target_distance)
+    v_y_target = interpolate_trajectory_point(main_result.X, main_result.V_y, target_distance)
+    v_final_at_target = np.sqrt(v_x_target**2 + v_y_target**2)
+    kinetic_energy_residual = 0.5 * mass_kg * v_final_at_target**2
+    initial_kinetic_energy = 0.5 * mass_kg * main_result.v0**2
+    energy_retention_pct = (kinetic_energy_residual / initial_kinetic_energy) * 100
+    
+    # Layout metriche
+    metrics_cols = st.columns(6)
+    
+    with metrics_cols[0]:
+        st.metric("Angolo Ottimale", f"{optimal_angle:.2f}°",
+                 delta=f"{optimal_angle - direct_angle:+.2f}°")
+    
+    with metrics_cols[1]:
+        st.metric("Velocità Iniziale", f"{main_result.v0:.1f} m/s")
+    
+    with metrics_cols[2]:
+        st.metric("Tempo di Volo", f"{main_result.flight_time:.2f} s")
+    
+    with metrics_cols[3]:
+        target_drop = (params.launch_height + np.tan(np.radians(optimal_angle)) * target_distance -
+                      interpolate_trajectory_point(main_result.X, main_result.Y, target_distance)) * 100
+        st.metric("Drop al Bersaglio", f"{target_drop:.1f} cm")
+    
+    with metrics_cols[4]:
+        st.metric("Energia Residua", 
+                 f"{kinetic_energy_residual:.1f} J",
+                 delta=f"{energy_retention_pct:.1f}%",
+                 help="Energia cinetica all'impatto sul bersaglio")
+
+def create_enhanced_summary(main_result, params, optimal_angle, target_distance):
+    """Crea riepilogo esecutivo con energia residua"""
+    
+    # Calcoli energia
+    mass_kg = params.mass / 1000.0
+    v_x_target = interpolate_trajectory_point(main_result.X, main_result.V_x, target_distance)
+    v_y_target = interpolate_trajectory_point(main_result.X, main_result.V_y, target_distance)
+    v_final_at_target = np.sqrt(v_x_target**2 + v_y_target**2)
+    kinetic_energy_residual = 0.5 * mass_kg * v_final_at_target**2
+    initial_kinetic_energy = 0.5 * mass_kg * main_result.v0**2
+    
+    # Altri calcoli esistenti
+    direct_angle = np.degrees(np.arctan2(params.target_height - params.launch_height, target_distance))
+    target_drop = (params.launch_height + np.tan(np.radians(optimal_angle)) * target_distance -
+                  interpolate_trajectory_point(main_result.X, main_result.Y, target_distance)) * 100
+    energy_retention = (v_final_at_target**2 / main_result.v0**2) * 100
+    stats = main_result.integration_stats
+    efficiency = (100 * stats['steps'] / (stats['steps'] + stats['rejections']) 
+                 if (stats['steps'] + stats['rejections']) > 0 else 0)
+    
+    summary_data = {
+        'Parametro': [
+            'Angolo di tiro ottimale', 
+            'Velocità iniziale calcolata', 
+            'Altezza di lancio effettiva',
+            'Drop al bersaglio', 
+            'Tempo di volo totale', 
+            'Altezza massima raggiunta',
+            'Gittata massima teorica',
+            'Energia residua all\'impatto',
+            'Energia cinetica iniziale',
+            'Energia cinetica residua',
+            'Velocità residua al bersaglio',
+            'Ritenzione energia finale',
+            'Efficienza integrazione numerica', 
+            'Perdita energia aerodinamica'
+        ],
+        'Valore': [
+            f"{optimal_angle:.3f}°", 
+            f"{main_result.v0:.2f} m/s", 
+            f"{params.launch_height:.3f} m",
+            f"{target_drop:.2f} cm", 
+            f"{main_result.flight_time:.3f} s", 
+            f"{main_result.max_height:.2f} m",
+            f"{main_result.range_distance:.1f} m",
+            f"{kinetic_energy_residual:.2f} J",
+            f"{initial_kinetic_energy:.1f} J",
+            f"{kinetic_energy_residual:.1f} J",
+            f"{v_final_at_target:.2f} m/s",
+            f"{energy_retention:.1f}%",
+            f"{efficiency:.1f}%",
+            f"{main_result.energy_loss:.2f} J"
+        ],
+        'Note Tecniche': [
+            f"Scarto da mira diretta: {optimal_angle - direct_angle:+.2f}°",
+            "Basata su modello energetico arco" if not params.use_measured_v0 else "Valore inserito dall'utente",
+            "Corretta per geometria posturale arciere",
+            f"Alla distanza di {target_distance}m dal punto di mira",
+            f"Per coprire {target_distance}m di distanza orizzontale",
+            "Apice della parabola balistica",
+            "Distanza teorica impatto al suolo (y=0)",
+            "Energia al momento del rilascio dalla corda",
+            f"Energia all'impatto ({energy_retention:.1f}% della iniziale)",
+            f"Velocità conservata: {(v_final_at_target/main_result.v0)*100:.1f}%",
+            "Percentuale energia cinetica conservata",
+            f"Passi RK4: {stats['steps']}, Rifiutati: {stats['rejections']}",
+            "Energia dissipata per resistenza aerodinamica"
+        ]
+    }
+    
+    return pd.DataFrame(summary_data)
+
+def export_comprehensive_analysis_with_energy(trajectory_result: TrajectoryResults,
+                                            params: SimulationParams,
+                                            sight_data: pd.DataFrame,
+                                            monte_carlo_stats: Optional[Dict] = None) -> io.BytesIO:
+    """Export completo analisi in Excel con energia residua"""
+    
+    output = io.BytesIO()
+    
+    try:
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            # Sheet 3: Traiettoria completa CON ENERGIA (campionata per Excel)
+            max_points = 500
+            step = max(1, len(trajectory_result.X) // max_points)
+            
+            mass_kg = params.mass / 1000.0
+            v_total_array = np.sqrt(trajectory_result.V_x[::step]**2 + trajectory_result.V_y[::step]**2)
+            kinetic_energy_array = 0.5 * mass_kg * v_total_array**2
+            initial_energy = 0.5 * mass_kg * trajectory_result.v0**2
+            energy_retention_array = (kinetic_energy_array / initial_energy) * 100
+            
+            trajectory_data = pd.DataFrame({
+                'Distanza (m)': trajectory_result.X[::step],
+                'Altezza (m)': trajectory_result.Y[::step],
+                'Velocità X (m/s)': trajectory_result.V_x[::step],
+                'Velocità Y (m/s)': trajectory_result.V_y[::step],
+                'Velocità totale (m/s)': v_total_array,
+                'Tempo (s)': trajectory_result.times[::step],
+                'Energia cinetica (J)': kinetic_energy_array,
+                'Ritenzione energia (%)': energy_retention_array,
+                'Perdita energia (J)': initial_energy - kinetic_energy_array
+            })
+            trajectory_data.to_excel(writer, sheet_name='Traiettoria_Completa', index=False)
+            
+            # Sheet 4: Scala mirino
+            sight_data.to_excel(writer, sheet_name='Scala_Mirino', index=False)
+            
+            # Sheet MonteCarlo (opzionale)
+            if monte_carlo_stats:
+                mc_df = pd.DataFrame(monte_carlo_stats)
+                mc_df.to_excel(writer, sheet_name='MonteCarlo', index=False)
+        
+        output.seek(0)
+        return output
+
+    except Exception as e:
+        logger.error(f"Errore export Excel: {e}")
+        # Fallback CSV
+        output = io.BytesIO()
+        sight_data.to_csv(output, index=False)
+        output.seek(0)
+        return output
+
 # INTERFACCIA STREAMLIT PRINCIPALE
 def main():
     st.set_page_config(
@@ -1371,7 +1575,7 @@ def main():
         
         st.markdown("### 🎯 Parametri Bersaglio")
         target_distance = st.number_input("Distanza (m)", 5.0, 100.0, 40.0, step=1.0)
-        target_height= st.number_input("Altezza (m)", -10.0, 10.0, 1.4, step=0.1)
+        target_height = st.number_input("Altezza (m)", -10.0, 10.0, 1.4, step=0.1)
         
         st.markdown("### ⚡ Velocità")
         use_measured_v0 = st.checkbox("Usa velocità misurata", 
@@ -1550,35 +1754,12 @@ def main():
             st.markdown("## 📊 Risultati Simulazione")
             
             # Metriche principali
-            metrics_cols = st.columns(5)
-            
-            with metrics_cols[0]:
-                direct_angle = np.degrees(np.arctan2(params.target_height - params.launch_height, 
-                                                   target_distance))
-                st.metric("Angolo Ottimale", f"{optimal_angle:.2f}°",
-                         delta=f"{optimal_angle - direct_angle:+.2f}°")
-            
-            with metrics_cols[1]:
-                st.metric("Velocità Iniziale", f"{main_result.v0:.1f} m/s")
-            
-            with metrics_cols[2]:
-                st.metric("Tempo di Volo", f"{main_result.flight_time:.2f} s")
-            
-            with metrics_cols[3]:
-                target_drop = (params.launch_height + np.tan(np.radians(optimal_angle)) * target_distance -
-                              interpolate_trajectory_point(main_result.X, main_result.Y, target_distance)) * 100
-                st.metric("Drop al Bersaglio", f"{target_drop:.1f} cm")
-            
-            with metrics_cols[4]:
-                energy_retention = ((main_result.V_x[-1]**2 + main_result.V_y[-1]**2) / 
-                                  main_result.v0**2) * 100
-                st.metric("Ritenzione Energia", f"{energy_retention:.1f}%")
+            display_enhanced_metrics(main_result, params, optimal_angle, target_distance)
             
             # Grafico principale traiettoria
             st.markdown("### 📈 Analisi Traiettoria Completa")
             trajectory_figure = create_comprehensive_trajectory_plot(
-                main_result, params, ideal_result, show_wind_effects
-            , target_distance=target_distance)
+                main_result, params, ideal_result, show_wind_effects, target_distance=target_distance)
             st.pyplot(trajectory_figure, use_container_width=True)
             
             # Statistiche integrazione
@@ -1595,10 +1776,10 @@ def main():
                 with integration_cols[3]:
                     st.metric("Step Max", f"{stats['max_dt_used']:.2e} s")
                 with integration_cols[4]:
-                    efficiency = (100 * stats['steps'] / 
-                                (stats['steps'] + stats['rejections']) 
-                                if (stats['steps'] + stats['rejections']) > 0 else 0)
-                    st.metric("Efficienza", f"{efficiency:.1f}%")
+                    efficiency_val = (100 * stats['steps'] / 
+                                    (stats['steps'] + stats['rejections']) 
+                                    if (stats['steps'] + stats['rejections']) > 0 else 0)
+                    st.metric("Efficienza", f"{efficiency_val:.1f}%")
                 with integration_cols[5]:
                     st.metric("Perdita Energia", f"{main_result.energy_loss:.2f} J")
             
@@ -1700,7 +1881,7 @@ def main():
                         mc_detailed_df = pd.DataFrame(mc_detailed_data)
                         st.dataframe(mc_detailed_df, use_container_width=True, hide_index=True)
             
-                        st.markdown("---")
+            st.markdown("---")
             st.markdown("### 💾 Export e Download")
             
             export_cols = st.columns(4)
@@ -1732,7 +1913,6 @@ def main():
                 except Exception as e:
                     st.error(f"Errore export Excel: {str(e)}")
             
-            
             with export_cols[2]:
                 # PDF scala mirino tabellare
                 if len(sight_scale_data) > 0:
@@ -1750,6 +1930,7 @@ def main():
                     except Exception as e:
                         st.error(f"Errore generazione PDF tabellare: {str(e)}")
             
+            with export_cols[3]:
                 # PDF mirino grafico con laser
                 try:
                     buf, fname = esporta_mirino_pdf_bytes(sight_scale_data, eye_to_nock, nock_to_riser)
@@ -1761,76 +1942,42 @@ def main():
                     )
                 except Exception as e:
                     st.error(f"Errore generazione PDF grafico: {str(e)}")
-                        
-            with export_cols[3]:
-                # JSON configurazione
-                config_export = {
-                    'parametri_freccia': {
-                        'massa_g': mass, 'lunghezza_m': length, 'diametro_mm': diameter,
-                        'spine': spine, 'bilanciamento_m': balance_point, 'tipo_punta': tip_type
-                    },
-                    'parametri_arco': {
-                        'forza_lb': draw_force, 'allungo_m': draw_length, 
-                        'brace_height_m': brace_height, 'efficienza': efficiency, 'tipo': bow_type
-                    },
-                    'condizioni_ambientali': {
-                        'vento_ms': wind_speed, 'temperatura_c': air_temperature,
-                        'pressione_hpa': air_pressure, 'umidita_pct': humidity, 'altitudine_m': altitude
-                    },
-                    'risultati': {
-                        'angolo_ottimale_gradi': optimal_angle, 'velocita_iniziale_ms': main_result.v0,
-                        'drop_bersaglio_cm': target_drop, 'tempo_volo_s': main_result.flight_time
-                    }
-                }
-                
-                import json
-                config_json = json.dumps(config_export, indent=2, ensure_ascii=False)
-                st.download_button(
-                    "⚙️ Download Configurazione (JSON)",
-                    data=config_json,
-                    file_name=f"config_simulazione_{int(target_distance)}m.json",
-                    mime="application/json"
-                )
             
+            # Riepilogo esecutivo
             st.markdown("---")
             st.markdown("### 📋 Riepilogo Esecutivo")
             
-
-            # Energia cinetica residua all'impatto
             try:
+                # Calcola energia residua all'impatto
                 mass_kg = params.mass / 1000.0
                 v_x_target = interpolate_trajectory_point(main_result.X, main_result.V_x, target_distance)
                 v_y_target = interpolate_trajectory_point(main_result.X, main_result.V_y, target_distance)
                 v_final_at_target = float((v_x_target**2 + v_y_target**2) ** 0.5)
                 kinetic_energy_residual = 0.5 * mass_kg * v_final_at_target**2
-            except Exception as _e:
-                kinetic_energy_residual = float('nan')
-
-# Energia cinetica residua all'impatto (calcolata prima del riepilogo)
-try:
-    _mass_kg = params.mass / 1000.0
-    _vx_t = interpolate_trajectory_point(main_result.X, main_result.V_x, params.target_distance)
-    _vy_t = interpolate_trajectory_point(main_result.X, main_result.V_y, params.target_distance)
-    _v_final_at_target = float((_vx_t**2 + _vy_t**2) ** 0.5)
-    kinetic_energy_residual = 0.5 * _mass_kg * _v_final_at_target**2
-except Exception as _e:
-    kinetic_energy_residual = float('nan')
-                            try:
-            try:
+                
+                # Calcoli aggiuntivi per il riepilogo
+                direct_angle = np.degrees(np.arctan2(params.target_height - params.launch_height, target_distance))
+                target_drop = (params.launch_height + np.tan(np.radians(optimal_angle)) * target_distance -
+                              interpolate_trajectory_point(main_result.X, main_result.Y, target_distance)) * 100
+                energy_retention = (v_final_at_target**2 / main_result.v0**2) * 100
+                stats = main_result.integration_stats
+                efficiency_val = (100 * stats['steps'] / (stats['steps'] + stats['rejections']) 
+                                if (stats['steps'] + stats['rejections']) > 0 else 0)
+                
                 summary_data = {
                     'Parametro': [
                         'Angolo di tiro ottimale', 'Velocità iniziale calcolata', 'Altezza di lancio effettiva',
                         'Drop al bersaglio', 'Tempo di volo totale', 'Altezza massima raggiunta',
                         'Gittata massima teorica', 'Ritenzione energia finale',
-        'Energia residua all’impatto',
+                        'Energia residua all\'impatto',
                         'Efficienza integrazione numerica', 'Perdita energia aerodinamica'
                     ],
                     'Valore': [
                         f"{optimal_angle:.3f}°", f"{main_result.v0:.2f} m/s", f"{params.launch_height:.3f} m",
                         f"{target_drop:.2f} cm", f"{main_result.flight_time:.3f} s", f"{main_result.max_height:.2f} m",
                         f"{main_result.range_distance:.1f} m", f"{energy_retention:.1f}%",
-        f"{kinetic_energy_residual:.2f} J",
-                        f"{efficiency:.1f}%", f"{main_result.energy_loss:.2f} J"
+                        f"{kinetic_energy_residual:.2f} J",
+                        f"{efficiency_val:.1f}%", f"{main_result.energy_loss:.2f} J"
                     ],
                     'Note Tecniche': [
                         f"Scarto da mira diretta: {optimal_angle - direct_angle:+.2f}°",
@@ -1841,33 +1988,28 @@ except Exception as _e:
                         "Apice della parabola balistica",
                         "Distanza teorica impatto al suolo (y=0)",
                         "Percentuale energia cinetica conservata",
+                        "Energia all'impatto con il bersaglio",
                         f"Passi RK4: {stats['steps']}, Rifiutati: {stats['rejections']}",
                         "Energia dissipata per resistenza aerodinamica"
-  
-
-except Exception as e:
-    summary_data = {
-        'Parametro': ['Riepilogo ridotto per errore'],
-        'Valore': [str(e)],
-        'Note Tecniche': ['Variabile mancante nel riepilogo; verificare configurazione.']
-    }
-                  ]
+                    ]
                 }
+                
+                summary_df = pd.DataFrame(summary_data)
+                st.dataframe(summary_df, use_container_width=True, hide_index=True)
+                
             except Exception as e:
+                st.error(f"Errore nel calcolo del riepilogo: {str(e)}")
                 summary_data = {
                     'Parametro': ['Riepilogo ridotto per errore'],
                     'Valore': [str(e)],
                     'Note Tecniche': ['Variabile mancante nel riepilogo; verificare configurazione.']
                 }
-
-            
-            summary_df = pd.DataFrame(summary_data)
-            st.dataframe(summary_df, use_container_width=True, hide_index=True)
+                summary_df = pd.DataFrame(summary_data)
+                st.dataframe(summary_df, use_container_width=True, hide_index=True)
             
             # Messaggio finale successo
             st.success("🎉 Simulazione balistica completata con successo! "
                       "Tutti i dati sono stati calcolati e sono disponibili per il download.")
-            
             
             with st.expander("📚 Note Tecniche e Limitazioni"):
                 st.markdown("""
@@ -1903,231 +2045,6 @@ except Exception as e:
         finally:
             # Cleanup progress indicators
             progress_container.empty()
-
-
-
-class SightingSystemCalculator:
-    """Calcolatore sistema di mira con geometria 3D completa"""
-    
-    def __init__(self, eye_to_nock: float, nock_to_riser: float):
-        self.eye_to_nock = eye_to_nock
-        self.nock_to_riser = nock_to_riser
-        self.sight_radius = eye_to_nock + nock_to_riser
-    
-    def calculate_sight_projection(self, distance: float, drop_meters: float) -> float:
-        """Calcola proiezione su riser considerando drop"""
-        horizontal_distance = distance
-        vertical_offset = drop_meters
-        
-        correction_angle = np.arctan(vertical_offset / horizontal_distance) if horizontal_distance > 0 else 0
-        
-        projection_m = horizontal_distance * (self.eye_to_nock + vertical_offset) / (self.nock_to_riser + horizontal_distance)
-        projection_cm = projection_m * 100.0 - vertical_offset * 100.0
-        
-        return projection_cm
-    
-    def generate_sight_marks(self, distances: np.ndarray, drops_cm: np.ndarray, 
-                           trajectory_result: TrajectoryResults, mass_g: float) -> pd.DataFrame:
-        """Genera tacche mirino per distanze specifiche CON ENERGIA RESIDUA"""
-        sight_data = []
-        mass_kg = mass_g / 1000.0
-        
-        for dist, drop_cm in zip(distances, drops_cm):
-            if not np.isnan(drop_cm):
-                drop_m = drop_cm / 100.0
-                projection = self.calculate_sight_projection(dist, drop_m)
-                
-                # NUOVO: Calcola energia cinetica residua
-                v_x_at_dist = interpolate_trajectory_point(trajectory_result.X, trajectory_result.V_x, dist)
-                v_y_at_dist = interpolate_trajectory_point(trajectory_result.X, trajectory_result.V_y, dist)
-                v_total_at_dist = np.sqrt(v_x_at_dist**2 + v_y_at_dist**2)
-                kinetic_energy = 0.5 * mass_kg * v_total_at_dist**2
-                
-                sight_data.append({
-                    'Distanza (m)': int(dist),
-                    'Drop (cm)': round(drop_cm, 1),
-                    'Proiezione riser (cm)': round(projection, 2),
-                    'Energia (J)': round(kinetic_energy, 1),  # NUOVA COLONNA
-                    'Velocità (m/s)': round(v_total_at_dist, 1)  # BONUS: velocità residua
-                })
-        
-        return pd.DataFrame(sight_data)
-
-
-def display_enhanced_metrics(main_result, params, optimal_angle, target_distance):
-    """Visualizza metriche principali con energia residua"""
-    
-    # Calcoli preliminari
-    mass_kg = params.mass / 1000.0
-    direct_angle = np.degrees(np.arctan2(params.target_height - params.launch_height, target_distance))
-    
-    # NUOVO: Calcola energia residua al bersaglio
-    v_x_target = interpolate_trajectory_point(main_result.X, main_result.V_x, target_distance)
-    v_y_target = interpolate_trajectory_point(main_result.X, main_result.V_y, target_distance)
-    v_final_at_target = np.sqrt(v_x_target**2 + v_y_target**2)
-    kinetic_energy_residual = 0.5 * mass_kg * v_final_at_target**2
-    initial_kinetic_energy = 0.5 * mass_kg * main_result.v0**2
-    energy_retention_pct = (kinetic_energy_residual / initial_kinetic_energy) * 100
-    
-    # Layout metriche
-    metrics_cols = st.columns(6)  # Aumentato da 5 a 6 colonne
-    
-    with metrics_cols[0]:
-        st.metric("Angolo Ottimale", f"{optimal_angle:.2f}°",
-                 delta=f"{optimal_angle - direct_angle:+.2f}°")
-    
-    with metrics_cols[1]:
-        st.metric("Velocità Iniziale", f"{main_result.v0:.1f} m/s")
-    
-    with metrics_cols[2]:
-        st.metric("Tempo di Volo", f"{main_result.flight_time:.2f} s")
-    
-    with metrics_cols[3]:
-        target_drop = (params.launch_height + np.tan(np.radians(optimal_angle)) * target_distance -
-                      interpolate_trajectory_point(main_result.X, main_result.Y, target_distance)) * 100
-        st.metric("Drop al Bersaglio", f"{target_drop:.1f} cm")
-    
-    with metrics_cols[4]:
-        # SOSTITUITO: Energia residua invece di ritenzione percentuale
-        st.metric("Energia Residua", 
-                 f"{kinetic_energy_residual:.1f} J",
-                 delta=f"{energy_retention_pct:.1f}%",
-                 help="Energia cinetica all'impatto sul bersaglio")
-
-
-def create_enhanced_summary(main_result, params, optimal_angle, target_distance):
-    """Crea riepilogo esecutivo con energia residua"""
-    
-    # Calcoli energia
-    mass_kg = params.mass / 1000.0
-    v_x_target = interpolate_trajectory_point(main_result.X, main_result.V_x, target_distance)
-    v_y_target = interpolate_trajectory_point(main_result.X, main_result.V_y, target_distance)
-    v_final_at_target = np.sqrt(v_x_target**2 + v_y_target**2)
-    kinetic_energy_residual = 0.5 * mass_kg * v_final_at_target**2
-    initial_kinetic_energy = 0.5 * mass_kg * main_result.v0**2
-    
-    # Altri calcoli esistenti
-    direct_angle = np.degrees(np.arctan2(params.target_height - params.launch_height, target_distance))
-    target_drop = (params.launch_height + np.tan(np.radians(optimal_angle)) * target_distance -
-                  interpolate_trajectory_point(main_result.X, main_result.Y, target_distance)) * 100
-    energy_retention = (v_final_at_target**2 / main_result.v0**2) * 100
-    stats = main_result.integration_stats
-    efficiency = (100 * stats['steps'] / (stats['steps'] + stats['rejections']) 
-                 if (stats['steps'] + stats['rejections']) > 0 else 0)
-    
-    summary_data = {
-        'Parametro': [
-            'Angolo di tiro ottimale', 
-            'Velocità iniziale calcolata', 
-            'Altezza di lancio effettiva',
-            'Drop al bersaglio', 
-            'Tempo di volo totale', 
-            'Altezza massima raggiunta',
-            'Gittata massima teorica',
-        'Energia residua all’impatto',
-            'Energia cinetica iniziale',           # NUOVO
-            'Energia cinetica residua',           # NUOVO
-            'Velocità residua al bersaglio',      # NUOVO
-            'Ritenzione energia finale',
-            'Efficienza integrazione numerica', 
-            'Perdita energia aerodinamica'
-        ],
-        'Valore': [
-            f"{optimal_angle:.3f}°", 
-            f"{main_result.v0:.2f} m/s", 
-            f"{params.launch_height:.3f} m",
-            f"{target_drop:.2f} cm", 
-            f"{main_result.flight_time:.3f} s", 
-            f"{main_result.max_height:.2f} m",
-            f"{main_result.range_distance:.1f} m",
-        f"{kinetic_energy_residual:.2f} J",
-            f"{initial_kinetic_energy:.1f} J",           # NUOVO
-            f"{kinetic_energy_residual:.1f} J",         # NUOVO
-            f"{v_final_at_target:.2f} m/s",             # NUOVO
-            f"{energy_retention:.1f}%",
-            f"{efficiency:.1f}%",
-            f"{main_result.energy_loss:.2f} J"
-        ],
-        'Note Tecniche': [
-            f"Scarto da mira diretta: {optimal_angle - direct_angle:+.2f}°",
-            "Basata su modello energetico arco" if not params.use_measured_v0 else "Valore inserito dall'utente",
-            "Corretta per geometria posturale arciere",
-            f"Alla distanza di {target_distance}m dal punto di mira",
-            f"Per coprire {target_distance}m di distanza orizzontale",
-            "Apice della parabola balistica",
-            "Distanza teorica impatto al suolo (y=0)",
-            "Energia al momento del rilascio dalla corda",                    # NUOVO
-            f"Energia all'impatto ({energy_retention:.1f}% della iniziale)", # NUOVO
-            f"Velocità conservata: {(v_final_at_target/main_result.v0)*100:.1f}%", # NUOVO
-            "Percentuale energia cinetica conservata",
-            f"Passi RK4: {stats['steps']}, Rifiutati: {stats['rejections']}",
-            "Energia dissipata per resistenza aerodinamica"
-        ]
-    }
-    
-    return pd.DataFrame(summary_data)
-
-
-def export_comprehensive_analysis_with_energy(trajectory_result: TrajectoryResults,
-                                            params: SimulationParams,
-                                            sight_data: pd.DataFrame,
-                                            monte_carlo_stats: Optional[Dict] = None) -> io.BytesIO:
-    """Export completo analisi in Excel con energia residua"""
-    
-    output = io.BytesIO()
-    
-    try:
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            # Sheet 3: Traiettoria completa CON ENERGIA (campionata per Excel)
-            max_points = 500
-            step = max(1, len(trajectory_result.X) // max_points)
-            
-            mass_kg = params.mass / 1000.0
-            v_total_array = np.sqrt(trajectory_result.V_x[::step]**2 + trajectory_result.V_y[::step]**2)
-            kinetic_energy_array = 0.5 * mass_kg * v_total_array**2
-            initial_energy = 0.5 * mass_kg * trajectory_result.v0**2
-            energy_retention_array = (kinetic_energy_array / initial_energy) * 100
-            
-            trajectory_data = pd.DataFrame({
-                'Distanza (m)': trajectory_result.X[::step],
-                'Altezza (m)': trajectory_result.Y[::step],
-                'Velocità X (m/s)': trajectory_result.V_x[::step],
-                'Velocità Y (m/s)': trajectory_result.V_y[::step],
-                'Velocità totale (m/s)': v_total_array,
-                'Tempo (s)': trajectory_result.times[::step],
-                'Energia cinetica (J)': kinetic_energy_array,
-                'Ritenzione energia (%)': energy_retention_array,
-                'Perdita energia (J)': initial_energy - kinetic_energy_array
-            })
-            trajectory_data.to_excel(writer, sheet_name='Traiettoria_Completa', index=False)
-            
-            # Sheet 4: Scala mirino
-            try:
-                sight_data.to_excel(writer, sheet_name='Scala_Mirino', index=False)
-            except Exception:
-                pass
-            
-            # Sheet MonteCarlo (opzionale)
-            if monte_carlo_stats:
-                mc_df = pd.DataFrame(monte_carlo_stats)
-                mc_df.to_excel(writer, sheet_name='MonteCarlo', index=False)
-        
-        output.seek(0)
-        return output
-
-    except Exception as e:
-        logger.error(f"Errore export Excel: {e}")
-        # Fallback CSV
-        output = io.BytesIO()
-        try:
-            if isinstance(sight_data, pd.DataFrame):
-                sight_data.to_csv(output, index=False)
-            else:
-                output.write(b"")
-        except Exception:
-            output.write(b"")
-        output.seek(0)
-        return output
 
 if __name__ == '__main__':
     main()
