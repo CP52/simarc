@@ -811,16 +811,42 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     y_sight_at_target = params.launch_height + np.tan(np.radians(main_result.angle_degrees)) * params.target_distance
     drop_cm = (y_sight_at_target - y_impact) * 100  # Drop in cm al bersaglio
     
-    # Limite Y robusto: include suolo, lancio, bersaglio e apice
-    y_bot_candidates = [0.0, Y1.min() if len(Y1)>0 else 0.0, y_impact]
-    y_top_candidates = [params.launch_height, params.target_height, Y1.max() if len(Y1)>0 else 0.0, y_impact]
-    y_min_plot = float(min(y_bot_candidates))
-    y_max_plot = float(max(y_top_candidates))
-    # padding minimo
-    pad = 0.05 * max(0.1, (y_max_plot - y_min_plot)) + 0.1
-    if not (y_max_plot > y_min_plot):
-        y_min_plot, y_max_plot = -0.5, 1.5  # fallback sensato
-    ax_traj.set_ylim(y_min_plot - pad, y_max_plot + pad)
+    # --- NUOVA SEZIONE: DIMENSIONAMENTO OTTIMALE DEL GRAFICO ---
+    
+    # Limite X: da 0 al bersaglio + piccolo margine
+    x_min_plot = 0
+    x_max_plot_optimized = params.target_distance * 1.05  # 5% oltre il bersaglio
+    
+    # Trova l'indice del punto più vicino al bersaglio
+    if len(X1) > 0:
+        target_idx = np.argmin(np.abs(X1 - params.target_distance))
+        # Limite Y: include lancio, bersaglio, apice e impatto
+        y_impact_actual = Y1[target_idx] if target_idx < len(Y1) else y_impact
+    else:
+        y_impact_actual = y_impact
+    
+    y_elements = [
+        params.launch_height,
+        params.target_height,
+        main_result.max_height if hasattr(main_result, 'max_height') else np.max(Y1) if len(Y1) > 0 else 0,
+        y_impact_actual,
+        0  # terreno
+    ]
+    
+    y_min_plot = max(0, min(y_elements) * 0.9)  # 10% sotto il punto più basso, minimo 0
+    y_max_plot = max(y_elements) * 1.15  # 15% sopra il punto più alto
+    
+    # Se l'intervallo Y è troppo piccolo, espandi
+    if (y_max_plot - y_min_plot) < 2.0:
+        y_center = (y_max_plot + y_min_plot) / 2
+        y_min_plot = y_center - 1.0
+        y_max_plot = y_center + 1.0
+    
+    # Imposta i limiti degli assi
+    ax_traj.set_xlim(x_min_plot, x_max_plot_optimized)
+    ax_traj.set_ylim(y_min_plot, y_max_plot)
+    
+    # --- FINE NUOVA SEZIONE ---
     
     # Annotazione Drop (dopo aver impostato i limiti) - USARE drop_cm calcolato sopra
     if abs(drop_cm) > 0.5:
@@ -837,7 +863,7 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
             fontsize=11, fontweight='bold', clip_on=True
         )
     
-    # Grafici velocità, energia, drop
+    # Grafici velocità, energia, drop - AGGIORNARE LIMITI X
     V_total = np.sqrt(main_result.V_x**2 + main_result.V_y**2)
     ax_vel.plot(main_result.X, V_total, color=PLOT_CONFIG['colors']['success'], 
                linewidth=2.5, label='Velocità totale')
@@ -846,6 +872,7 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     ax_vel.plot(main_result.X, main_result.V_y, color=PLOT_CONFIG['colors']['danger'], 
                linewidth=1.8, alpha=0.8, label='Componente Y')
     
+    ax_vel.set_xlim(x_min_plot, x_max_plot_optimized)
     ax_vel.set_xlabel("Distanza (m)", fontsize=11)
     ax_vel.set_ylabel("Velocità (m/s)", fontsize=11)
     ax_vel.grid(True, alpha=0.3)
@@ -862,6 +889,7 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     ax_energy.axhline(y=90, color='red', linestyle='--', alpha=0.7, label='90% ritenzione')
     ax_energy.axhline(y=80, color='orange', linestyle='--', alpha=0.7, label='80% ritenzione')
     
+    ax_energy.set_xlim(x_min_plot, x_max_plot_optimized)
     ax_energy.set_xlabel("Distanza (m)", fontsize=11)
     ax_energy.set_ylabel("Ritenzione Energia (%)", fontsize=11)
     ax_energy.grid(True, alpha=0.3)
@@ -870,7 +898,7 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     ax_energy.set_ylim(70, 105)
     
     # Calcola drop per range esteso - USARE LO STESSO CALCOLO
-    distances_drop = np.linspace(5, params.target_distance * 1.2, 50)
+    distances_drop = np.linspace(5, min(params.target_distance * 1.2, x_max_plot_optimized), 50)
     drops_calculated = []
     
     for d in distances_drop:
@@ -896,6 +924,7 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
                                color=PLOT_CONFIG['colors']['accent'], s=150, 
                                marker='*', edgecolors='black', linewidth=2, zorder=10)
     
+    ax_drop.set_xlim(x_min_plot, x_max_plot_optimized)
     ax_drop.set_xlabel("Distanza (m)", fontsize=11)
     ax_drop.set_ylabel("Drop (cm)", fontsize=11)
     ax_drop.grid(True, alpha=0.3)
