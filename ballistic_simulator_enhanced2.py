@@ -806,10 +806,9 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     ax_traj.plot(x_sight, y_sight, color=PLOT_CONFIG['colors']['danger'],
                 linestyle=':', linewidth=2, label="Linea di mira", alpha=0.8)
     
-    # Drop al bersaglio
-    # Limite Y robusto: include suolo, lancio, bersaglio e apice
+    # Drop al bersaglio - USARE LO STESSO CALCOLO DI export_comprehensive_analysis
     y_impact = interpolate_trajectory_point(X1, Y1, params.target_distance)
-    y_sight_at_target = y0 + np.tan(angle_rad) * params.target_distance
+    y_sight_at_target = params.launch_height + np.tan(np.radians(main_result.angle_degrees)) * params.target_distance
     drop_cm = (y_sight_at_target - y_impact) * 100  # Drop in cm al bersaglio
     
     # Limite Y robusto: include suolo, lancio, bersaglio e apice
@@ -823,15 +822,14 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
         y_min_plot, y_max_plot = -0.5, 1.5  # fallback sensato
     ax_traj.set_ylim(y_min_plot - pad, y_max_plot + pad)
     
-    # Annotazione Drop (dopo aver impostato i limiti)
-    drop_cm = (y_sight[1] - y_impact) * 100
+    # Annotazione Drop (dopo aver impostato i limiti) - USARE drop_cm calcolato sopra
     if abs(drop_cm) > 0.5:
         y_center = 0.5 * (y_min_plot + y_max_plot)
         offset = -1.0 if y_impact > y_center else 1.0
         y_text = np.clip(y_impact + offset, y_min_plot + 0.3, y_max_plot - 0.3)
         
         ax_traj.annotate(
-            f"Drop: {drop_target:.1f} cm",
+            f"Drop: {drop_cm:.1f} cm",
             xy=(params.target_distance, y_impact),
             xytext=(params.target_distance - 0.25 * params.target_distance, y_text),
             arrowprops=dict(arrowstyle="->", color=PLOT_CONFIG['colors']['danger'], lw=2),
@@ -871,15 +869,15 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     ax_energy.set_title("Ritenzione Energia Cinetica", fontsize=12, fontweight='bold')
     ax_energy.set_ylim(70, 105)
     
-    # Calcola drop per range esteso
+    # Calcola drop per range esteso - USARE LO STESSO CALCOLO
     distances_drop = np.linspace(5, params.target_distance * 1.2, 50)
     drops_calculated = []
     
     for d in distances_drop:
         if d <= main_result.X.max():
             y_arrow = interpolate_trajectory_point(main_result.X, main_result.Y, d)
-            y_sight = y0 + np.tan(angle_rad) * d
-            drop = (y_sight - y_arrow) * 100  # cm
+            y_sight_d = params.launch_height + np.tan(np.radians(main_result.angle_degrees)) * d
+            drop = (y_sight_d - y_arrow) * 100  # cm
             drops_calculated.append(drop)
         else:
             drops_calculated.append(np.nan)
