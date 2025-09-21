@@ -831,7 +831,7 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
         y_text = np.clip(y_impact + offset, y_min_plot + 0.3, y_max_plot - 0.3)
         
         ax_traj.annotate(
-            f"Drop: {drop_cm:.1f} cm",
+            f"Drop: {drop_target:.1f} cm",
             xy=(params.target_distance, y_impact),
             xytext=(params.target_distance - 0.25 * params.target_distance, y_text),
             arrowprops=dict(arrowstyle="->", color=PLOT_CONFIG['colors']['danger'], lw=2),
