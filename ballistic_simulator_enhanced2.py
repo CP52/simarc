@@ -800,7 +800,7 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     x_margin = max(2, x_max_plot * 0.02)  # Margine 2%
     x_max_final = x_max_plot + x_margin
     
-    # Linea di mira ESTESA fino ai nuovi limiti
+    # Linea de mira ESTESA fino ai nuovi limiti
     x_sight = np.array([0, x_max_final])
     y_sight = y0 + np.tan(angle_rad) * x_sight
     ax_traj.plot(x_sight, y_sight, color=PLOT_CONFIG['colors']['danger'],
@@ -811,48 +811,84 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     y_sight_at_target = params.launch_height + np.tan(np.radians(main_result.angle_degrees)) * params.target_distance
     drop_cm = (y_sight_at_target - y_impact) * 100  # Drop in cm al bersaglio
     
-    # --- NUOVA SEZIONE: DIMENSIONAMENTO OTTIMALE DEL GRAFICO ---
+    # --- DIMENSIONAMENTO OTTIMALE DEL GRAFICO - MIGLIORATO PER TIRO VERSO IL BASSO ---
     
     # Limite X: da 0 al bersaglio + piccolo margine
     x_min_plot = 0
     x_max_plot_optimized = params.target_distance * 1.05  # 5% oltre il bersaglio
     
-    # Trova l'indice del punto più vicino al bersaglio
-    if len(X1) > 0:
-        target_idx = np.argmin(np.abs(X1 - params.target_distance))
-        # Limite Y: include lancio, bersaglio, apice e impatto
-        y_impact_actual = Y1[target_idx] if target_idx < len(Y1) else y_impact
-    else:
-        y_impact_actual = y_impact
-    
-    y_elements = [
-        params.launch_height,
-        params.target_height,
-        main_result.max_height if hasattr(main_result, 'max_height') else np.max(Y1) if len(Y1) > 0 else 0,
-        y_impact_actual,
-        0  # terreno
+    # Trova tutti i punti Y rilevanti per il dimensionamento
+    y_relevant_points = [
+        params.launch_height,      # Punto di lancio
+        params.target_height,      # Altezza bersaglio
+        y_impact,                  # Altezza impatto stimata
+        0                          # Terreno
     ]
     
-    y_min_plot = max(0, min(y_elements) * 0.9)  # 10% sotto il punto più basso, minimo 0
-    y_max_plot = max(y_elements) * 1.15  # 15% sopra il punto più alto
+    # Aggiungi l'altezza massima se disponibile
+    if hasattr(main_result, 'max_height'):
+        y_relevant_points.append(main_result.max_height)
+    elif len(Y1) > 0:
+        y_relevant_points.append(np.max(Y1))
     
-    # Se l'intervallo Y è troppo piccolo, espandi
-    if (y_max_plot - y_min_plot) < 2.0:
+    # Aggiungi alcuni punti intermedi della traiettoria per catturare meglio la forma
+    if len(Y1) > 10:
+        # Prendi alcuni punti campione lungo la traiettoria
+        sample_indices = np.linspace(0, len(Y1)-1, 20, dtype=int)
+        y_relevant_points.extend(Y1[sample_indices])
+    
+    y_min_plot = min(y_relevant_points)
+    y_max_plot = max(y_relevant_points)
+    
+    # Calcola l'intervallo Y e applica margini appropriati
+    y_range = y_max_plot - y_min_plot
+    
+    # Se l'intervallo è troppo piccolo, espandi
+    if y_range < 2.0:
         y_center = (y_max_plot + y_min_plot) / 2
         y_min_plot = y_center - 1.0
         y_max_plot = y_center + 1.0
+        y_range = 2.0
+    
+    # Margini proporzionali all'intervallo, ma con minimi garantiti
+    y_margin_bottom = max(y_range * 0.1, 0.5)  # almeno 0.5m
+    y_margin_top = max(y_range * 0.1, 0.5)     # almeno 0.5m
+    
+    # Gestione speciale per tiri verso il basso
+    if params.target_height < params.launch_height - 2.0:  # Tiro significativamente verso il basso
+        # Più spazio in basso per vedere la discesa
+        y_margin_bottom = max(y_range * 0.3, 2.0)  # almeno 2m
+        y_margin_top = max(y_range * 0.05, 0.5)    # meno spazio in alto
+    
+    # Gestione speciale per tiri verso l'alto
+    elif params.target_height > params.launch_height + 2.0:  # Tiro significativamente verso l'alto
+        # Più spazio in alto per vedere la salita
+        y_margin_bottom = max(y_range * 0.05, 0.5)  # meno spazio in basso
+        y_margin_top = max(y_range * 0.3, 2.0)      # almeno 2m
+    
+    # Applica i margini
+    y_min_plot_final = y_min_plot - y_margin_bottom
+    y_max_plot_final = y_max_plot + y_margin_top
+    
+    # Assicurati che il terreno (y=0) sia sempre visibile per tiri verso il basso
+    if y_min_plot_final > 0 and any(y < 0 for y in [y_impact, params.target_height] if y is not None):
+        y_min_plot_final = min(y_min_plot_final, -1.0)  # Mostra almeno 1m sotto lo 0
     
     # Imposta i limiti degli assi
     ax_traj.set_xlim(x_min_plot, x_max_plot_optimized)
-    ax_traj.set_ylim(y_min_plot, y_max_plot)
+    ax_traj.set_ylim(y_min_plot_final, y_max_plot_final)
     
-    # --- FINE NUOVA SEZIONE ---
+    # Aggiungi linea del terreno (y=0) se visibile
+    if y_min_plot_final <= 0 <= y_max_plot_final:
+        ax_traj.axhline(y=0, color='gray', linestyle='--', alpha=0.7, linewidth=1, label='Terreno')
+    
+    # --- FINE SEZIONE DIMENSIONAMENTO ---
     
     # Annotazione Drop (dopo aver impostato i limiti) - USARE drop_cm calcolato sopra
     if abs(drop_cm) > 0.5:
-        y_center = 0.5 * (y_min_plot + y_max_plot)
+        y_center = 0.5 * (y_min_plot_final + y_max_plot_final)
         offset = -1.0 if y_impact > y_center else 1.0
-        y_text = np.clip(y_impact + offset, y_min_plot + 0.3, y_max_plot - 0.3)
+        y_text = np.clip(y_impact + offset, y_min_plot_final + 0.3, y_max_plot_final - 0.3)
         
         ax_traj.annotate(
             f"Drop: {drop_cm:.1f} cm",
@@ -936,17 +972,6 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     
     plt.tight_layout()
     return fig
-
-def create_sight_scale_visualization(sight_data: pd.DataFrame, eye_to_nock: float, nock_to_riser: float, laser_distance: float = 30.0) -> plt.Figure:
-    """Visualizzazione scala mirino interattiva"""
-    
-    fig, ax = plt.subplots(figsize=(6, 10))
-    
-    if len(sight_data) == 0:
-        ax.text(0.5, 0.5, "Nessun dato disponibile", 
-               transform=ax.transAxes, ha='center', va='center',
-               fontsize=14, color='red')
-        return fig
     
     # Estrai dati
     distances = sight_data['Distanza (m)'].values
