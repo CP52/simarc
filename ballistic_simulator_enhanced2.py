@@ -811,68 +811,45 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     y_sight_at_target = params.launch_height + np.tan(np.radians(main_result.angle_degrees)) * params.target_distance
     drop_cm = (y_sight_at_target - y_impact) * 100  # Drop in cm al bersaglio
     
-    # --- DIMENSIONAMENTO OTTIMALE DEL GRAFICO - MIGLIORATO PER TIRO VERSO IL BASSO ---
+    # --- DIMENSIONAMENTO OTTIMALE DEL GRAFICO - VERSIONE MIGLIORATA ---
     
     # Limite X: da 0 al bersaglio + piccolo margine
     x_min_plot = 0
     x_max_plot_optimized = params.target_distance * 1.05  # 5% oltre il bersaglio
     
-    # Trova tutti i punti Y rilevanti per il dimensionamento
-    y_relevant_points = [
-        params.launch_height,      # Punto di lancio
-        params.target_height,      # Altezza bersaglio
-        y_impact,                  # Altezza impatto stimata
-        0                          # Terreno
-    ]
+    # 1) CALCOLO Y_MIN OTTIMALE
+    if params.target_height >= 0:
+        # Tiri verso l'alto o orizzontali: Y_MIN = 0
+        y_min_plot_final = 0.0
+    else:
+        # Tiri verso il basso: Y_MIN = intero successivo alla quota bersaglio
+        y_min_plot_final = math.floor(params.target_height) - 1
     
-    # Aggiungi l'altezza massima se disponibile
-    if hasattr(main_result, 'max_height'):
-        y_relevant_points.append(main_result.max_height)
-    elif len(Y1) > 0:
-        y_relevant_points.append(np.max(Y1))
+    # 2) CALCOLO Y_MAX OTTIMALE
+    # Massima elevazione della traiettoria (approssimata all'intero superiore)
+    max_trajectory_height = math.ceil(main_result.max_height) if hasattr(main_result, 'max_height') else math.ceil(np.max(Y1) if len(Y1) > 0 else 0)
     
-    # Aggiungi alcuni punti intermedi della traiettoria per catturare meglio la forma
-    if len(Y1) > 10:
-        # Prendi alcuni punti campione lungo la traiettoria
-        sample_indices = np.linspace(0, len(Y1)-1, 20, dtype=int)
-        y_relevant_points.extend(Y1[sample_indices])
+    # Quota Y della linea di mira alla distanza del bersaglio (approssimata all'intero superiore)
+    y_sight_at_target_approx = math.ceil(y_sight_at_target)
     
-    y_min_plot = min(y_relevant_points)
-    y_max_plot = max(y_relevant_points)
+    # Scegli la maggiore tra le due
+    y_max_plot_final = max(max_trajectory_height, y_sight_at_target_approx)
     
-    # Calcola l'intervallo Y e applica margini appropriati
-    y_range = y_max_plot - y_min_plot
+    # Aggiungi un piccolo margine superiore (10% dell'intervallo o 1m, il maggiore)
+    y_range = y_max_plot_final - y_min_plot_final
+    y_margin_top = max(y_range * 0.1, 1.0)
+    y_max_plot_final += y_margin_top
     
-    # Se l'intervallo è troppo piccolo, espandi
-    if y_range < 2.0:
-        y_center = (y_max_plot + y_min_plot) / 2
-        y_min_plot = y_center - 1.0
-        y_max_plot = y_center + 1.0
-        y_range = 2.0
+    # Per tiri verso l'alto, assicurati che Y_MIN sia almeno 0
+    if params.target_height >= 0:
+        y_min_plot_final = max(0.0, y_min_plot_final)
     
-    # Margini proporzionali all'intervallo, ma con minimi garantiti
-    y_margin_bottom = max(y_range * 0.1, 0.5)  # almeno 0.5m
-    y_margin_top = max(y_range * 0.1, 0.5)     # almeno 0.5m
-    
-    # Gestione speciale per tiri verso il basso
-    if params.target_height < params.launch_height - 2.0:  # Tiro significativamente verso il basso
-        # Più spazio in basso per vedere la discesa
-        y_margin_bottom = max(y_range * 0.3, 2.0)  # almeno 2m
-        y_margin_top = max(y_range * 0.05, 0.5)    # meno spazio in alto
-    
-    # Gestione speciale per tiri verso l'alto
-    elif params.target_height > params.launch_height + 2.0:  # Tiro significativamente verso l'alto
-        # Più spazio in alto per vedere la salita
-        y_margin_bottom = max(y_range * 0.05, 0.5)  # meno spazio in basso
-        y_margin_top = max(y_range * 0.3, 2.0)      # almeno 2m
-    
-    # Applica i margini
-    y_min_plot_final = y_min_plot - y_margin_bottom
-    y_max_plot_final = y_max_plot + y_margin_top
-    
-    # Assicurati che il terreno (y=0) sia sempre visibile per tiri verso il basso
-    if y_min_plot_final > 0 and any(y < 0 for y in [y_impact, params.target_height] if y is not None):
-        y_min_plot_final = min(y_min_plot_final, -1.0)  # Mostra almeno 1m sotto lo 0
+    # Controlli di sicurezza per evitare intervalli troppo piccoli
+    if y_max_plot_final - y_min_plot_final < 2.0:
+        # Se l'intervallo è troppo piccolo, espandi simmetricamente
+        y_center = (y_max_plot_final + y_min_plot_final) / 2
+        y_min_plot_final = y_center - 1.0
+        y_max_plot_final = y_center + 1.0
     
     # Imposta i limiti degli assi
     ax_traj.set_xlim(x_min_plot, x_max_plot_optimized)
@@ -882,7 +859,7 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     if y_min_plot_final <= 0 <= y_max_plot_final:
         ax_traj.axhline(y=0, color='gray', linestyle='--', alpha=0.7, linewidth=1, label='Terreno')
     
-    # --- FINE SEZIONE DIMENSIONAMENTO ---
+    # --- FINE SEZIONE DIMENSIONAMENTO OTTIMIZZATO ---
     
     # Annotazione Drop (dopo aver impostato i limiti) - USARE drop_cm calcolato sopra
     if abs(drop_cm) > 0.5:
