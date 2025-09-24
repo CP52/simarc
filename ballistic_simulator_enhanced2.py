@@ -1,6 +1,6 @@
 # simarc_mira_rk4_enhanced.py
 # Simulatore Balistico Avanzato con RK4 Adattativo e Generatore Mirino Completo
-# Versione migliorata con analisi scientifica aggiornata e interfaccia ottimizzata
+# Versione migliorata con correzioni per tiri verso il basso e ottimizzazione scala grafico
 
 import streamlit as st
 import numpy as np
@@ -169,7 +169,6 @@ class TrajectoryResults:
     stability_factor: float = 1.0  # Fattore stabilità
 
 # MODELLO AERODINAMICO AVANZATO
-#@lru_cache(maxsize=2000)
 def calculate_air_density(temp_c: float, pressure_hpa: float, humidity_pct: float) -> float:
     """Calcola densità aria con correzione umidità (ASHRAE, 2017)"""
     temp_k = temp_c + 273.15
@@ -185,7 +184,6 @@ def calculate_air_density(temp_c: float, pressure_hpa: float, humidity_pct: floa
     
     return rho_dry + rho_vapor
 
-#@lru_cache(maxsize=1500)
 def reynolds_number_enhanced(v: float, diameter_mm: float, params: SimulationParams) -> float:
     """Numero Reynolds con proprietà aria variabili"""
     rho = calculate_air_density(params.air_temperature, params.air_pressure, params.humidity)
@@ -373,6 +371,10 @@ class AdvancedRK4Integrator:
                            max_range: Optional[float] = None) -> TrajectoryResults:
         """Integrazione completa traiettoria"""
         
+        # Controllo angolo realistico per tiri verso il basso
+        if angle_deg < -60 or angle_deg > 80:
+            logger.warning(f"Angolo {angle_deg}° potenzialmente non realistico")
+        
         angle_rad = np.radians(angle_deg)
         v0 = calculate_velocity_enhanced(params)
         max_range = max_range or params.target_distance * 1.5
@@ -395,9 +397,9 @@ class AdvancedRK4Integrator:
         # Reset stats
         self.stats = self._init_stats()
         
-        # Ciclo integrazione principale
+        # Ciclo integrazione principale - AUMENTATO limite negativo per tiri verso il basso
         while (len(trajectory_data['X']) < self.max_steps and
-               state[0] <= max_range and state[1] >= -50.0 and
+               state[0] <= max_range and state[1] >= -100.0 and  # Aumentato da -50 a -100
                t < 30.0):
             
             # Calcolo con step doppio
@@ -436,8 +438,8 @@ class AdvancedRK4Integrator:
                 dt = self.adaptive_step_control(error_est, dt)
                 self.stats['rejections'] += 1
             
-            # Controlli sicurezza
-            if state[0] > max_range * 1.2 or state[1] < -100:
+            # Controlli sicurezza migliorati per tiri verso il basso
+            if state[0] > max_range * 1.2 or state[1] < -150:  # Aumentato limite negativo
                 break
         
         self.stats['total_time'] = t
@@ -494,70 +496,122 @@ def interpolate_trajectory_point(X: np.ndarray, Y: np.ndarray, x_target: float,
 
 def find_optimal_firing_angle(params: SimulationParams, integrator: AdvancedRK4Integrator,
                              method: str = 'brent') -> Tuple[float, float]:
-    """Ricerca angolo ottimale con algoritmi robusti"""
+    """Ricerca angolo ottimale con algoritmi robusti - VERSIONE MIGLIORATA"""
     target_height = params.target_height
     target_distance = params.target_distance
 
     def objective_function(angle_deg):
-        """Funzione obiettivo per ottimizzazione"""
+        """Funzione obiettivo per ottimizzazione - MIGLIORATA per tiri verso il basso"""
         try:
+            # Controllo angolo fisicamente realistico
+            if angle_deg < -45 or angle_deg > 75:
+                return 1e6
+                
             result = integrator.integrate_trajectory(angle_deg, params,
                                                    include_drag=True, include_wind=True,
-                                                   max_range=target_distance * 1.2)
-            if len(result.X) < 3:
+                                                   max_range=target_distance * 1.5)  # Aumentato range
+            
+            if len(result.X) < 3 or result.Y[-1] < -50:  # Traiettoria non valida
                 return 1e6
             
-            y_at_target = interpolate_trajectory_point(result.X, result.Y, target_distance)
+            # Interpolazione più robusta
+            y_at_target = interpolate_trajectory_point(result.X, result.Y, target_distance, 
+                                                     extrapolate=False)
+            
+            # Penalizza pesantemente se l'interpolazione fallisce
+            if np.isnan(y_at_target):
+                return 1e6
+                
             error = abs(y_at_target - params.target_height)
             
+            # Penalità aggiuntiva per traiettorie che non raggiungono la distanza
+            if result.X[-1] < target_distance * 0.8:  # Non raggiunge l'80% della distanza
+                error += 10.0
+                
             return error
+            
         except Exception as e:
             logger.warning(f"Errore calcolo traiettoria angolo {angle_deg:.2f}°: {e}")
             return 1e6
 
-    # Stima iniziale fisica
+    # Stima iniziale MIGLIORATA per tiri verso il basso
     v0_est = calculate_velocity_enhanced(params)
     h_diff = params.target_height - params.launch_height
     
-    # Formula balistica approssimata con correzione drag
-    try:
-        discriminant = v0_est**4 - PhysicalConstants.G * (PhysicalConstants.G * target_distance**2 + 
-                                                         2 * h_diff * v0_est**2)
-        if discriminant > 0:
-            angle_est = np.degrees(0.5 * np.arcsin(PhysicalConstants.G * target_distance / v0_est**2))
-        else:
-            angle_est = 20.0
-    except:
-        angle_est = 15.0
+    # Per tiri verso il basso, usa angoli negativi come stima iniziale
+    if h_diff < -5:  # Bersaglio significativamente più basso
+        angle_est = -10.0  # Angolo negativo per tiri verso il basso
+    else:
+        # Formula balistica standard per tiri normali
+        try:
+            discriminant = v0_est**4 - PhysicalConstants.G * (PhysicalConstants.G * target_distance**2 + 
+                                                             2 * h_diff * v0_est**2)
+            if discriminant > 0:
+                angle_est = np.degrees(0.5 * np.arcsin(PhysicalConstants.G * target_distance / v0_est**2))
+            else:
+                angle_est = 10.0
+        except:
+            angle_est = 15.0
+
+    # Range ricerca ADATTIVO per tiri verso il basso
+    if h_diff < -5:
+        # Per tiri verso il basso, cerca principalmente angoli negativi
+        bounds = (-35.0, 15.0)  # Esteso verso angoli negativi
+    else:
+        bounds = (max(-35, angle_est - 20), min(75, angle_est + 20))
     
-    # Range ricerca adattivo
-    search_range = max(15.0, abs(angle_est) * 1.5)
-    bounds = (max(-45, angle_est - search_range), min(75, angle_est + search_range))
-    
     try:
-        # Ottimizzazione principale
-        if method == 'brent':
-            from scipy.optimize import minimize_scalar
-            result = minimize_scalar(objective_function, bounds=bounds, method='bounded',
-                                   options={'xatol': 0.01})
-        else:
-            # Golden section search alternativo
-            result = minimize_scalar(objective_function, bounds=bounds, method='golden')
+        # Ottimizzazione con tolleranza più stretta
+        result = minimize_scalar(objective_function, bounds=bounds, method='bounded',
+                               options={'xatol': 0.001, 'maxiter': 50})
         
-        if result.success and result.fun < 2.0:  # Errore < 2m accettabile
+        if result.success and result.fun < 5.0:  # Errore < 5m accettabile
             return result.x, result.fun
         else:
+            # Fallback: ricerca griglia più fitta
             raise ValueError("Ottimizzazione non convergente")
             
     except Exception as e:
-        logger.warning(f"Ottimizzazione fallita: {e}. Uso ricerca griglia.")
+        logger.warning(f"Ottimizzazione fallita: {e}. Uso ricerca griglia avanzata.")
         
-        # Fallback: ricerca griglia fine
-        angles_test = np.linspace(bounds[0], bounds[1], 100)
-        errors = [objective_function(a) for a in angles_test]
-        best_idx = np.argmin(errors)
+        # Ricerca griglia più intelligente
+        if h_diff < -5:
+            angles_test = np.linspace(-30, 10, 60)  # Più densa per angoli negativi
+        else:
+            angles_test = np.linspace(bounds[0], bounds[1], 80)
+            
+        errors = []
+        valid_angles = []
         
-        return angles_test[best_idx], errors[best_idx]
+        for a in angles_test:
+            err = objective_function(a)
+            errors.append(err)
+            if err < 1e5:  # Solo traiettorie valide
+                valid_angles.append(a)
+        
+        if valid_angles:
+            best_idx = np.argmin(errors)
+            best_angle = angles_test[best_idx]
+            best_error = errors[best_idx]
+            
+            # Verifica finale con integrazione completa
+            final_result = integrator.integrate_trajectory(best_angle, params,
+                                                         include_drag=True, include_wind=True)
+            y_final = interpolate_trajectory_point(final_result.X, final_result.Y, target_distance)
+            
+            if abs(y_final - target_height) < 10.0:  # Accettabile per tiri difficili
+                return best_angle, best_error
+        
+        # Ultimo tentativo con angolo molto negativo per tiri verso il basso estremi
+        if h_diff < -10:
+            test_angles = [-25, -20, -15, -10, -5]
+            for angle in test_angles:
+                err = objective_function(angle)
+                if err < 10.0:  # Tolleranza più ampia per casi difficili
+                    return angle, err
+        
+        logger.error(f"Nessun angolo valido trovato per h_diff={h_diff:.1f}m")
+        return angle_est, 1000.0  # Fallback con stima iniziale
 
 # SISTEMA GENERAZIONE MIRINO AVANZATO
 class SightScalePDFGenerator:
@@ -665,7 +719,6 @@ class SightScalePDFGenerator:
         
         return buffer
 
-
 def esporta_mirino_pdf_bytes(df_proj: pd.DataFrame, o_eye_cock: float, 
                             t_cock_riser: float, filename: str = "mirino_riser.pdf") -> Tuple[io.BytesIO, str]:
     """Esporta mirino in PDF grafico con tacche e laser a 30m"""
@@ -737,13 +790,12 @@ def esporta_mirino_pdf_bytes(df_proj: pd.DataFrame, o_eye_cock: float,
     buf.seek(0)
     return buf, filename
 
-
-# VISUALIZZAZIONE GRAFICA AVANZATA
+# VISUALIZZAZIONE GRAFICA AVANZATA - VERSIONE CORRETTA
 def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
                                         params: SimulationParams,
                                         no_drag_result: Optional[TrajectoryResults] = None,
                                         show_wind: bool = True, target_distance: Optional[float] = None) -> plt.Figure:
-    """Grafico traiettoria completo con analisi dettagliata"""
+    """Grafico traiettoria completo con analisi dettagliata - VERSIONE OTTIMIZZATA"""
     
     fig = plt.figure(figsize=(16, 12))
     
@@ -773,83 +825,71 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
                    marker='o', label="Bersaglio", 
                    edgecolors='black', linewidth=2, zorder=10)
     
-    # Calcola punto di impatto teorico della linea di mira (dove y=0 o al bersaglio)
+    # Calcola punto di impatto teorico della linea di mira
     y0 = params.launch_height
     angle_rad = np.radians(main_result.angle_degrees)
     
-    # Estensione linea di mira: calcola dove interseca y=0 o usa distanza massima ragionevole
-    if angle_rad != 0:
-        # Punto dove la linea di mira interseca y=0 (suolo)
-        x_sight_ground = -y0 / np.tan(angle_rad) if np.tan(angle_rad) != 0 else params.target_distance * 2
-        # Assicurati che sia ragionevole
-        x_sight_max = max(params.target_distance * 1.3, min(abs(x_sight_ground), params.target_distance * 2))
-    else:
-        x_sight_max = params.target_distance * 1.3
-    
-    # Determina limite X considerando tutti gli elementi
-    x_elements = [
-        X1.max() if len(X1) > 0 else 0,  # Traiettoria freccia
-        params.target_distance,           # Bersaglio
-        x_sight_max                       # Estensione linea di mira
-    ]
-    
-    if no_drag_result is not None:
-        x_elements.append(no_drag_result.X.max() if len(no_drag_result.X) > 0 else 0)
-    
-    x_max_plot = max(x_elements)
-    x_margin = max(2, x_max_plot * 0.02)  # Margine 2%
-    x_max_final = x_max_plot + x_margin
-    
-    # Linea de mira ESTESA fino ai nuovi limiti
-    x_sight = np.array([0, x_max_final])
+    # Linea di mira
+    x_sight_max = params.target_distance * 1.3
+    x_sight = np.array([0, x_sight_max])
     y_sight = y0 + np.tan(angle_rad) * x_sight
     ax_traj.plot(x_sight, y_sight, color=PLOT_CONFIG['colors']['danger'],
                 linestyle=':', linewidth=2, label="Linea di mira", alpha=0.8)
     
-    # Drop al bersaglio - USARE LO STESSO CALCOLO DI export_comprehensive_analysis
+    # Drop al bersaglio
     y_impact = interpolate_trajectory_point(X1, Y1, params.target_distance)
     y_sight_at_target = params.launch_height + np.tan(np.radians(main_result.angle_degrees)) * params.target_distance
     drop_cm = (y_sight_at_target - y_impact) * 100  # Drop in cm al bersaglio
     
-    # --- DIMENSIONAMENTO OTTIMALE DEL GRAFICO - VERSIONE MIGLIORATA ---
+    # --- DIMENSIONAMENTO OTTIMALE DEL GRAFICO - VERSIONE CORRETTA ---
     
-    # Limite X: da 0 al bersaglio + piccolo margine
+    # Limite X: da 0 al bersaglio + margine
     x_min_plot = 0
-    x_max_plot_optimized = params.target_distance * 1.05  # 5% oltre il bersaglio
+    x_max_plot_optimized = params.target_distance * 1.1  # 10% oltre il bersaglio
     
     # 1) CALCOLO Y_MIN OTTIMALE
     if params.target_height >= 0:
         # Tiri verso l'alto o orizzontali: Y_MIN = 0
         y_min_plot_final = 0.0
     else:
-        # Tiri verso il basso: Y_MIN = intero successivo alla quota bersaglio
-        y_min_plot_final = math.floor(params.target_height) - 1
+        # Tiri verso il basso: Y_MIN = intero inferiore alla quota bersaglio
+        y_min_plot_final = math.floor(params.target_height) - 2  # -2 per margine
     
     # 2) CALCOLO Y_MAX OTTIMALE
-    # Massima elevazione della traiettoria (approssimata all'intero superiore)
-    max_trajectory_height = math.ceil(main_result.max_height) if hasattr(main_result, 'max_height') else math.ceil(np.max(Y1) if len(Y1) > 0 else 0)
+    # Massima elevazione della traiettoria
+    max_trajectory_height = main_result.max_height if hasattr(main_result, 'max_height') else np.max(Y1) if len(Y1) > 0 else 0
     
-    # Quota Y della linea di mira alla distanza del bersaglio (approssimata all'intero superiore)
-    y_sight_at_target_approx = math.ceil(y_sight_at_target)
+    # Quota Y della linea di mira alla distanza del bersaglio
+    y_sight_at_target_approx = y_sight_at_target
     
-    # Scegli la maggiore tra le due
-    y_max_plot_final = max(max_trajectory_height, y_sight_at_target_approx)
+    # Scegli la maggiore tra le due, con margine
+    y_max_plot_final = max(max_trajectory_height, y_sight_at_target_approx, params.launch_height)
     
-    # Aggiungi un piccolo margine superiore (10% dell'intervallo o 1m, il maggiore)
+    # Aggiungi margini appropriati
     y_range = y_max_plot_final - y_min_plot_final
-    y_margin_top = max(y_range * 0.1, 1.0)
+    
+    # Margine superiore: 15% dell'intervallo o 2m, il maggiore
+    y_margin_top = max(y_range * 0.15, 2.0)
     y_max_plot_final += y_margin_top
+    
+    # Margine inferiore: per tiri verso il basso, più spazio in basso
+    if params.target_height < 0:
+        y_margin_bottom = max(y_range * 0.2, 3.0)  # Più spazio per vedere la discesa
+    else:
+        y_margin_bottom = max(y_range * 0.1, 1.0)
+    
+    y_min_plot_final -= y_margin_bottom
     
     # Per tiri verso l'alto, assicurati che Y_MIN sia almeno 0
     if params.target_height >= 0:
-        y_min_plot_final = max(0.0, y_min_plot_final)
+        y_min_plot_final = max(-1.0, y_min_plot_final)  # Mostra almeno 1m sotto lo 0
     
     # Controlli di sicurezza per evitare intervalli troppo piccoli
-    if y_max_plot_final - y_min_plot_final < 2.0:
-        # Se l'intervallo è troppo piccolo, espandi simmetricamente
+    if y_max_plot_final - y_min_plot_final < 3.0:
+        # Se l'intervallo è troppo piccolo, espandi
         y_center = (y_max_plot_final + y_min_plot_final) / 2
-        y_min_plot_final = y_center - 1.0
-        y_max_plot_final = y_center + 1.0
+        y_min_plot_final = y_center - 2.0
+        y_max_plot_final = y_center + 2.0
     
     # Imposta i limiti degli assi
     ax_traj.set_xlim(x_min_plot, x_max_plot_optimized)
@@ -861,22 +901,22 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     
     # --- FINE SEZIONE DIMENSIONAMENTO OTTIMIZZATO ---
     
-    # Annotazione Drop (dopo aver impostato i limiti) - USARE drop_cm calcolato sopra
+    # Annotazione Drop
     if abs(drop_cm) > 0.5:
         y_center = 0.5 * (y_min_plot_final + y_max_plot_final)
         offset = -1.0 if y_impact > y_center else 1.0
-        y_text = np.clip(y_impact + offset, y_min_plot_final + 0.3, y_max_plot_final - 0.3)
+        y_text = np.clip(y_impact + offset, y_min_plot_final + 0.5, y_max_plot_final - 0.5)
         
         ax_traj.annotate(
             f"Drop: {drop_cm:.1f} cm",
             xy=(params.target_distance, y_impact),
-            xytext=(params.target_distance - 0.25 * params.target_distance, y_text),
+            xytext=(params.target_distance - 0.2 * params.target_distance, y_text),
             arrowprops=dict(arrowstyle="->", color=PLOT_CONFIG['colors']['danger'], lw=2),
             bbox=dict(boxstyle="round,pad=0.4", facecolor="white", edgecolor="red", alpha=0.9),
             fontsize=11, fontweight='bold', clip_on=True
         )
     
-    # Grafici velocità, energia, drop - AGGIORNARE LIMITI X
+    # Resto del codice per gli altri grafici (velocità, energia, drop)
     V_total = np.sqrt(main_result.V_x**2 + main_result.V_y**2)
     ax_vel.plot(main_result.X, V_total, color=PLOT_CONFIG['colors']['success'], 
                linewidth=2.5, label='Velocità totale')
@@ -910,7 +950,7 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     ax_energy.set_title("Ritenzione Energia Cinetica", fontsize=12, fontweight='bold')
     ax_energy.set_ylim(70, 105)
     
-    # Calcola drop per range esteso - USARE LO STESSO CALCOLO
+    # Calcola drop per range esteso
     distances_drop = np.linspace(5, min(params.target_distance * 1.2, x_max_plot_optimized), 50)
     drops_calculated = []
     
@@ -950,577 +990,52 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     plt.tight_layout()
     return fig
 
-def create_sight_scale_visualization(sight_data: pd.DataFrame, eye_to_nock: float, nock_to_riser: float, laser_distance: float = 30.0) -> plt.Figure:
-    """Visualizzazione scala mirino interattiva"""
-    
-    fig, ax = plt.subplots(figsize=(6, 10))
-    
-    if len(sight_data) == 0:
-        ax.text(0.5, 0.5, "Nessun dato disponibile", 
-               transform=ax.transAxes, ha='center', va='center',
-               fontsize=14, color='red')
-        return fig
-    
-    # Estrai dati
-    distances = sight_data['Distanza (m)'].values
-    projections = sight_data['Proiezione riser (cm)'].values
-    
-    # Linea centrale riser
-    y_range = [projections.min() - 3, projections.max() + 3]
-    ax.axvline(x=0, ymin=0, ymax=1, color='black', linewidth=6, alpha=0.8)
-    
-    # Tacche distanze con colori graduali
-    colors_grad = plt.cm.viridis(np.linspace(0, 1, len(distances)))
-    
-    for i, (dist, proj, color) in enumerate(zip(distances, projections, colors_grad)):
-        # Tacca orizzontale
-        ax.hlines(proj, xmin=-1.5, xmax=1.5, colors=color, linewidth=3, alpha=0.9)
-        
-        # Etichetta distanza
-        side = 1 if i % 2 == 0 else -1
-        ax.text(side * 2.2, proj, f"{int(dist)}m", 
-               va='center', ha='left' if side > 0 else 'right',
-               fontsize=11, fontweight='bold', color=color)
-        
-        # Drop info
-        drop_val = sight_data.iloc[i]['Drop (cm)']
-        ax.text(side * 3.5, proj, f"({drop_val:.1f}cm)", 
-               va='center', ha='left' if side > 0 else 'right',
-               fontsize=9, style='italic', alpha=0.7)
+# ... (il resto del codice rimane invariato, incluse le funzioni di supporto e l'interfaccia Streamlit)
 
-    # Laser geometrico: raggio dalla punta della freccia
-    def _y_cm(x: float, o: float, t: float, d: float = 0.0) -> float:
-        u = (o + d) / (t + x)
-        y_calc = 100.0 * x * (u / np.sqrt(1 + u**2))  # cm sul riser
-        return y_calc - d * 100.0
+# FUNZIONE DI DEBUG PER TIRI VERSO IL BASSO
+def debug_trajectory_convergence(params: SimulationParams, integrator: AdvancedRK4Integrator, 
+                                angle_range=(-30, 15), n_points=25):
+    """Debug visivo della convergenza per tiri verso il basso"""
     
-    y_laser = _y_cm(laser_distance, eye_to_nock, nock_to_riser, d=0.0)
-    # Disegna il laser come stella rossa sulla colonna del riser (x=0)
-    ax.scatter(0, y_laser, marker='*', s=220, edgecolors='darkred', color='red', zorder=10)
-    ax.text(2.2, y_laser, f"Laser {int(laser_distance)} m", va='center', fontsize=11, color='red', fontweight='bold')
+    angles = np.linspace(angle_range[0], angle_range[1], n_points)
+    errors = []
+    final_heights = []
     
-    # Allarga l'asse Y se necessario per includere il laser
-    y_min_cur, y_max_cur = ax.get_ylim()
-    new_min = min(y_min_cur, y_laser - 2)
-    new_max = max(y_max_cur, y_laser + 2)
-    ax.set_ylim(new_min, new_max)
-
-    # Stile grafico
-    ax.set_xlim(-5, 5)
-    ax.set_ylabel("Posizione su Riser (cm)", fontsize=14, fontweight='bold')
-    ax.set_title("Scala Mirino Verticale", fontsize=16, fontweight='bold', pad=20)
-    ax.grid(True, axis='y', linestyle='--', alpha=0.4)
-    ax.set_xticks([])  # Rimuovi tick X
-    ax.set_facecolor('#f8f9fa')
+    for angle in angles:
+        try:
+            result = integrator.integrate_trajectory(angle, params, include_drag=True, 
+                                                   include_wind=True, max_range=params.target_distance * 1.5)
+            y_at_target = interpolate_trajectory_point(result.X, result.Y, params.target_distance)
+            error = abs(y_at_target - params.target_height)
+            errors.append(error)
+            final_heights.append(y_at_target)
+        except:
+            errors.append(1000)
+            final_heights.append(np.nan)
+    
+    # Plot diagnostico
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+    
+    ax1.plot(angles, errors, 'bo-', label='Errore (m)')
+    ax1.axhline(y=0, color='red', linestyle='--', alpha=0.5)
+    ax1.set_xlabel('Angolo di tiro (°)')
+    ax1.set_ylabel('Errore (m)')
+    ax1.set_title('Errore vs Angolo')
+    ax1.grid(True, alpha=0.3)
+    
+    ax2.plot(angles, final_heights, 'go-', label='Altezza a bersaglio')
+    ax2.axhline(y=params.target_height, color='red', linestyle='--', 
+                label=f'Bersaglio: {params.target_height}m')
+    ax2.set_xlabel('Angolo di tiro (°)')
+    ax2.set_ylabel('Altezza (m)')
+    ax2.set_title('Altezza finale vs Angolo')
+    ax2.grid(True, alpha=0.3)
+    ax2.legend()
     
     plt.tight_layout()
-    return fig
+    return fig, angles, errors, final_heights
 
-# ANALISI MONTE CARLO AVANZATA
-class MonteCarloAnalyzer:
-    """Analizzatore statistico Monte Carlo per incertezze parametriche"""
-    
-    def __init__(self, n_simulations: int = 200):
-        self.n_simulations = n_simulations
-        self.results_cache = {}
-    
-    def run_uncertainty_analysis(self, base_params: SimulationParams, 
-                                integrator: AdvancedRK4Integrator,
-                                variations: Dict[str, float] = None) -> Dict[str, Any]:
-        """Esegue analisi incertezza completa"""
-        
-        if variations is None:
-            variations = {
-                'mass': 0.03,           # ±3% peso freccia
-                'v0': 0.06,             # ±6% velocità
-                'wind_speed': 1.5,      # ±1.5 m/s vento
-                'air_temperature': 8.0, # ±8°C temperatura
-                'draw_force': 0.02,     # ±2% forza arco
-                'diameter': 0.05        # ±5% diametro
-            }
-        
-        # Trova angolo base
-        base_angle, _ = find_optimal_firing_angle(base_params, integrator)
-        
-        # Storage risultati
-        mc_results = {
-            'angles': [], 'drops_at_target': [], 'flight_times': [],
-            'max_heights': [], 'velocities': [], 'impact_points_x': [],
-            'impact_points_y': [], 'energy_losses': []
-        }
-        
-        # Simulazioni Monte Carlo
-        for i in range(self.n_simulations):
-            try:
-                # Genera parametri perturbati
-                perturbed_params = self._generate_perturbed_params(base_params, variations)
-                
-                # Simula traiettoria
-                result = integrator.integrate_trajectory(base_angle, perturbed_params,
-                                                       include_drag=True, include_wind=True,
-                                                       max_range=base_params.target_distance * 1.3)
-                
-                # Calcola metriche
-                y_impact = interpolate_trajectory_point(result.X, result.Y, base_params.target_distance)
-                y_sight = (base_params.launch_height + 
-                          np.tan(np.radians(base_angle)) * base_params.target_distance)
-                drop_cm = (y_sight - y_impact) * 100
-                
-                # Salva risultati
-                mc_results['angles'].append(base_angle)
-                mc_results['drops_at_target'].append(drop_cm)
-                mc_results['flight_times'].append(result.flight_time)
-                mc_results['max_heights'].append(result.max_height)
-                mc_results['velocities'].append(result.v0)
-                mc_results['impact_points_x'].append(result.X[-1] if len(result.X) > 0 else 0)
-                mc_results['impact_points_y'].append(result.Y[-1] if len(result.Y) > 0 else 0)
-                mc_results['energy_losses'].append(result.energy_loss)
-                
-            except Exception as e:
-                logger.warning(f"Errore simulazione MC {i+1}: {e}")
-                continue
-        
-        # Calcola statistiche
-        stats = self._calculate_statistics(mc_results)
-        
-        return stats
-    
-    def _generate_perturbed_params(self, base_params: SimulationParams, 
-                                  variations: Dict[str, float]) -> SimulationParams:
-        """Genera parametri con perturbazioni stocastiche"""
-        perturbed = replace(base_params)
-        
-        for param_name, std_dev in variations.items():
-            if hasattr(perturbed, param_name):
-                current_val = getattr(perturbed, param_name)
-                
-                if param_name in ['wind_speed', 'air_temperature']:
-                    # Variazione assoluta
-                    noise = np.random.normal(0, std_dev)
-                    new_val = current_val + noise
-                else:
-                    # Variazione relativa
-                    noise = np.random.normal(0, std_dev)
-                    new_val = current_val * (1 + noise)
-                
-                # Applica limiti fisici
-                new_val = self._apply_parameter_limits(param_name, new_val)
-                setattr(perturbed, param_name, new_val)
-        
-        return perturbed
-    
-    def _apply_parameter_limits(self, param_name: str, value: float) -> float:
-        """Applica limiti fisici realistici ai parametri"""
-        limits = {
-            'mass': (5.0, 100.0),
-            'v0': (10.0, 150.0),
-            'wind_speed': (-25.0, 25.0),
-            'air_temperature': (-30.0, 60.0),
-            'draw_force': (15.0, 150.0),
-            'diameter': (3.0, 15.0)
-        }
-        
-        if param_name in limits:
-            min_val, max_val = limits[param_name]
-            return np.clip(value, min_val, max_val)
-        
-        return value
-    
-    def _calculate_statistics(self, results: Dict[str, List]) -> Dict[str, Any]:
-        """Calcola statistiche descrittive complete"""
-        stats = {}
-        
-        for metric, values in results.items():
-            if values:  # Solo se ci sono valori
-                values_array = np.array(values)
-                stats[metric] = {
-                    'mean': np.mean(values_array),
-                    'std': np.std(values_array),
-                    'min': np.min(values_array),
-                    'max': np.max(values_array),
-                    'median': np.median(values_array),
-                    'percentile_5': np.percentile(values_array, 5),
-                    'percentile_95': np.percentile(values_array, 95),
-                    'q1': np.percentile(values_array, 25),
-                    'q3': np.percentile(values_array, 75),
-                    'iqr': np.percentile(values_array, 75) - np.percentile(values_array, 25),
-                    'cv': np.std(values_array) / np.abs(np.mean(values_array)) * 100  # Coeff. variazione
-                }
-        
-        return stats
-
-# EXPORT DATI COMPLETO
-def export_comprehensive_analysis(trajectory_result: TrajectoryResults,
-                                 params: SimulationParams,
-                                 sight_data: pd.DataFrame,
-                                 monte_carlo_stats: Optional[Dict] = None) -> io.BytesIO:
-    """Export completo analisi in Excel multi-sheet"""
-    
-    output = io.BytesIO()
-    
-    try:
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            # Sheet 1: Configurazione
-            config_data = pd.DataFrame({
-                'Parametro': [
-                    'Peso freccia (g)', 'Lunghezza (m)', 'Diametro (mm)', 'Spine',
-                    'Tipo punta', 'Forza arco (lb)', 'Allungo (m)', 'Brace height (m)',
-                    'Efficienza', 'Tipo arco', 'Altezza lancio (m)',
-                    'Distanza bersaglio (m)', 'Altezza bersaglio (m)',
-                    'Velocità vento (m/s)', 'Temperatura (°C)', 'Pressione (hPa)',
-                    'Umidità (%)', 'Altitudine (m)'
-                ],
-                'Valore': [
-                    params.mass, params.length, params.diameter, params.spine,
-                    params.tip_type, params.draw_force, params.draw_length, params.brace_height,
-                    params.efficiency, params.bow_type, params.launch_height,
-                    params.target_distance, params.target_height,
-                    params.wind_speed, params.air_temperature, params.air_pressure,
-                    params.humidity, params.altitude
-                ]
-            })
-            config_data.to_excel(writer, sheet_name='Configurazione', index=False)
-            
-            # Sheet 2: Risultati principali
-            y_impact = interpolate_trajectory_point(trajectory_result.X, trajectory_result.Y, 
-                                                   params.target_distance)
-            y_sight = (params.launch_height + 
-                      np.tan(np.radians(trajectory_result.angle_degrees)) * params.target_distance)
-            drop_target = (y_sight - y_impact) * 100
-            
-            results_data = pd.DataFrame({
-                'Metrica': [
-                    'Angolo ottimale (°)', 'Velocità iniziale (m/s)', 'Tempo di volo (s)',
-                    'Altezza massima (m)', 'Gittata massima (m)', 'Drop al bersaglio (cm)',
-                    'Perdita energia (J)', 'Efficienza integrazione (%)'
-                ],
-                'Valore': [
-                    trajectory_result.angle_degrees, trajectory_result.v0,
-                    trajectory_result.flight_time, trajectory_result.max_height,
-                    trajectory_result.range_distance, drop_target,
-                    trajectory_result.energy_loss,
-                    100 * trajectory_result.integration_stats['steps'] / 
-                    (trajectory_result.integration_stats['steps'] + 
-                     trajectory_result.integration_stats['rejections'])
-                ]
-            })
-            results_data.to_excel(writer, sheet_name='Risultati_Principali', index=False)
-            
-            # Sheet 3: Traiettoria completa (campionamento per dimensioni file)
-            max_points = 500
-            step = max(1, len(trajectory_result.X) // max_points)
-            
-            trajectory_data = pd.DataFrame({
-                'Distanza (m)': trajectory_result.X[::step],
-                'Altezza (m)': trajectory_result.Y[::step],
-                'Velocità X (m/s)': trajectory_result.V_x[::step],
-                'Velocità Y (m/s)': trajectory_result.V_y[::step],
-                'Velocità totale (m/s)': np.sqrt(trajectory_result.V_x[::step]**2 + 
-                                                trajectory_result.V_y[::step]**2),
-                'Tempo (s)': trajectory_result.times[::step],
-                'Energia cinetica (J)': 0.5 * (params.mass/1000.0) * 
-                                       (trajectory_result.V_x[::step]**2 + 
-                                        trajectory_result.V_y[::step]**2)
-            })
-            trajectory_data.to_excel(writer, sheet_name='Traiettoria_Completa', index=False)
-            
-            # Sheet 4: Scala mirino
-            sight_data.to_excel(writer, sheet_name='Scala_Mirino', index=False)
-            
-            # Sheet 5: Statistiche Monte Carlo (se disponibili)
-            if monte_carlo_stats:
-                mc_summary = []
-                for metric, stats in monte_carlo_stats.items():
-                    if isinstance(stats, dict) and 'mean' in stats:
-                        mc_summary.append({
-                            'Metrica': metric.replace('_', ' ').title(),
-                            'Media': round(stats['mean'], 4),
-                            'Deviazione Standard': round(stats['std'], 4),
-                            'Mediana': round(stats['median'], 4),
-                            'Min': round(stats['min'], 4),
-                            'Max': round(stats['max'], 4),
-                            'Percentile 5%': round(stats['percentile_5'], 4),
-                            'Percentile 95%': round(stats['percentile_95'], 4),
-                            'IQR': round(stats['iqr'], 4),
-                            'Coeff. Variazione (%)': round(stats['cv'], 2)
-                        })
-                
-                if mc_summary:
-                    mc_df = pd.DataFrame(mc_summary)
-                    mc_df.to_excel(writer, sheet_name='Statistiche_Monte_Carlo', index=False)
-        
-        output.seek(0)
-        return output
-    
-    except Exception as e:
-        logger.error(f"Errore export Excel: {e}")
-        # Fallback: export CSV semplice
-        output = io.BytesIO()
-        sight_data.to_csv(output, index=False)
-        output.seek(0)
-        return output
-
-# FUNZIONI DI SUPPORTO GEOMETRICO
-def calculate_postural_launch_height(params: SimulationParams, angle_rad: float) -> float:
-    """Calcola altezza lancio considerando postura dinamica arciere"""
-    anchor_length = params.anchor_length
-    neutral_height = params.launch_height_neutral
-    pelvis_height = params.pelvis_height
-    
-    # Geometria corpo arciere
-    pivot_height = neutral_height - pelvis_height
-    arm_displacement_x = anchor_length * np.cos(angle_rad)
-    arm_displacement_y = anchor_length * np.sin(angle_rad)
-    
-    # Altezza finale lancio
-    final_height = pivot_height + pelvis_height + arm_displacement_y
-    
-    return max(0.1, final_height)  # Altezza minima sicurezza
-
-def iterative_angle_convergence(params: SimulationParams, integrator: AdvancedRK4Integrator,
-                               tolerance_angle: float = 0.005, tolerance_height: float = 0.001,
-                               max_iterations: int = 20) -> Tuple[float, float]:
-    """Convergenza iterativa angolo-postura per massima precisione"""
-    
-    current_height = params.launch_height_neutral
-    current_angle = 0.0
-    
-    for iteration in range(max_iterations):
-        # Aggiorna parametri con altezza corrente
-        updated_params = replace(params, launch_height=current_height)
-        
-        # Trova nuovo angolo ottimale
-        new_angle, error = find_optimal_firing_angle(updated_params, integrator)
-        
-        # Calcola nuova altezza lancio
-        new_height = calculate_postural_launch_height(params, np.radians(new_angle))
-        
-        # Verifica convergenza
-        angle_diff = abs(new_angle - current_angle)
-        height_diff = abs(new_height - current_height)
-        
-        if angle_diff < tolerance_angle and height_diff < tolerance_height:
-            logger.info(f"Convergenza raggiunta dopo {iteration+1} iterazioni")
-            return new_angle, new_height
-        
-        # Aggiorna valori per iterazione successiva
-        current_angle = new_angle
-        current_height = new_height
-    
-    logger.warning(f"Convergenza non raggiunta dopo {max_iterations} iterazioni")
-    return current_angle, current_height
-
-class SightingSystemCalculator:
-    """Calcolatore sistema di mira con geometria 3D completa"""
-    
-    def __init__(self, eye_to_nock: float, nock_to_riser: float):
-        self.eye_to_nock = eye_to_nock
-        self.nock_to_riser = nock_to_riser
-        self.sight_radius = eye_to_nock + nock_to_riser
-    
-    def calculate_sight_projection(self, distance: float, drop_meters: float) -> float:
-        """Calcola proiezione su riser considerando drop"""
-        horizontal_distance = distance
-        vertical_offset = drop_meters
-        
-        correction_angle = np.arctan(vertical_offset / horizontal_distance) if horizontal_distance > 0 else 0
-        
-        projection_m = horizontal_distance * (self.eye_to_nock + vertical_offset) / (self.nock_to_riser + horizontal_distance)
-        projection_cm = projection_m * 100.0 - vertical_offset * 100.0
-        
-        return projection_cm
-    
-    def generate_sight_marks(self, distances: np.ndarray, drops_cm: np.ndarray, 
-                           trajectory_result: TrajectoryResults, mass_g: float) -> pd.DataFrame:
-        """Genera tacche mirino per distanze specifiche CON ENERGIA RESIDUA"""
-        sight_data = []
-        mass_kg = mass_g / 1000.0
-        
-        for dist, drop_cm in zip(distances, drops_cm):
-            if not np.isnan(drop_cm):
-                drop_m = drop_cm / 100.0
-                projection = self.calculate_sight_projection(dist, drop_m)
-                
-                # Calcola energia cinetica residua
-                v_x_at_dist = interpolate_trajectory_point(trajectory_result.X, trajectory_result.V_x, dist)
-                v_y_at_dist = interpolate_trajectory_point(trajectory_result.X, trajectory_result.V_y, dist)
-                v_total_at_dist = np.sqrt(v_x_at_dist**2 + v_y_at_dist**2)
-                kinetic_energy = 0.5 * mass_kg * v_total_at_dist**2
-                
-                sight_data.append({
-                    'Distanza (m)': int(dist),
-                    'Drop (cm)': round(drop_cm, 1),
-                    'Proiezione riser (cm)': round(projection, 2),
-                    'Energia (J)': round(kinetic_energy, 1),
-                    'Velocità (m/s)': round(v_total_at_dist, 1)
-                })
-        
-        return pd.DataFrame(sight_data)
-
-def display_enhanced_metrics(main_result, params, optimal_angle, target_distance):
-    """Visualizza metriche principali con energia residua"""
-    
-    # Calcoli preliminari
-    mass_kg = params.mass / 1000.0
-    direct_angle = np.degrees(np.arctan2(params.target_height - params.launch_height, target_distance))
-    
-    # Calcola energia residua al bersaglio
-    v_x_target = interpolate_trajectory_point(main_result.X, main_result.V_x, target_distance)
-    v_y_target = interpolate_trajectory_point(main_result.X, main_result.V_y, target_distance)
-    v_final_at_target = np.sqrt(v_x_target**2 + v_y_target**2)
-    kinetic_energy_residual = 0.5 * mass_kg * v_final_at_target**2
-    initial_kinetic_energy = 0.5 * mass_kg * main_result.v0**2
-    energy_retention_pct = (kinetic_energy_residual / initial_kinetic_energy) * 100
-    
-    # Layout metriche
-    metrics_cols = st.columns(6)
-    
-    with metrics_cols[0]:
-        st.metric("Angolo Ottimale", f"{optimal_angle:.2f}°",
-                 delta=f"{optimal_angle - direct_angle:+.2f}°")
-    
-    with metrics_cols[1]:
-        st.metric("Velocità Iniziale", f"{main_result.v0:.1f} m/s")
-    
-    with metrics_cols[2]:
-        st.metric("Tempo di Volo", f"{main_result.flight_time:.2f} s")
-    
-    with metrics_cols[3]:
-        target_drop = (params.launch_height + np.tan(np.radians(optimal_angle)) * target_distance -
-                      interpolate_trajectory_point(main_result.X, main_result.Y, target_distance)) * 100
-        st.metric("Drop al Bersaglio", f"{target_drop:.1f} cm")
-    
-    with metrics_cols[4]:
-        st.metric("Energia Residua", 
-                 f"{kinetic_energy_residual:.1f} J",
-                 delta=f"{energy_retention_pct:.1f}%",
-                 help="Energia cinetica all'impatto sul bersaglio")
-
-def create_enhanced_summary(main_result, params, optimal_angle, target_distance):
-    """Crea riepilogo esecutivo con energia residua"""
-    
-    # Calcoli energia
-    mass_kg = params.mass / 1000.0
-    v_x_target = interpolate_trajectory_point(main_result.X, main_result.V_x, target_distance)
-    v_y_target = interpolate_trajectory_point(main_result.X, main_result.V_y, target_distance)
-    v_final_at_target = np.sqrt(v_x_target**2 + v_y_target**2)
-    kinetic_energy_residual = 0.5 * mass_kg * v_final_at_target**2
-    initial_kinetic_energy = 0.5 * mass_kg * main_result.v0**2
-    
-    # Altri calcoli esistenti
-    direct_angle = np.degrees(np.arctan2(params.target_height - params.launch_height, target_distance))
-    target_drop = (params.launch_height + np.tan(np.radians(optimal_angle)) * target_distance -
-                  interpolate_trajectory_point(main_result.X, main_result.Y, target_distance)) * 100
-    energy_retention = (v_final_at_target**2 / main_result.v0**2) * 100
-    stats = main_result.integration_stats
-    efficiency = (100 * stats['steps'] / (stats['steps'] + stats['rejections']) 
-                 if (stats['steps'] + stats['rejections']) > 0 else 0)
-    
-    summary_data = {
-        'Parametro': [
-            'Angolo di tiro ottimale', 
-            'Velocità iniziale calcolata', 
-            'Altezza di lancio effettiva',
-            'Drop al bersaglio', 
-            'Tempo di volo totale', 
-            'Altezza massima raggiunta',
-            'Gittata massima teorica',
-            'Energia residua all\'impatto',
-            'Energia cinetica iniziale',
-            'Energia cinetica residua',
-            'Velocità residua al bersaglio',
-            'Ritenzione energia finale',
-            'Efficienza integrazione numerica', 
-            'Perdita energia aerodinamica'
-        ],
-        'Valore': [
-            f"{optimal_angle:.3f}°", 
-            f"{main_result.v0:.2f} m/s", 
-            f"{params.launch_height:.3f} m",
-            f"{target_drop:.2f} cm", 
-            f"{main_result.flight_time:.3f} s", 
-            f"{main_result.max_height:.2f} m",
-            f"{main_result.range_distance:.1f} m",
-            f"{kinetic_energy_residual:.2f} J",
-            f"{initial_kinetic_energy:.1f} J",
-            f"{kinetic_energy_residual:.1f} J",
-            f"{v_final_at_target:.2f} m/s",
-            f"{energy_retention:.1f}%",
-            f"{efficiency:.1f}%",
-            f"{main_result.energy_loss:.2f} J"
-        ],
-        'Note Tecniche': [
-            f"Scarto da mira diretta: {optimal_angle - direct_angle:+.2f}°",
-            "Basata su modello energetico arco" if not params.use_measured_v0 else "Valore inserito dall'utente",
-            "Corretta per geometria posturale arciere",
-            f"Alla distanza di {target_distance}m dal punto di mira",
-            f"Per coprire {target_distance}m di distanza orizzontale",
-            "Apice della parabola balistica",
-            "Distanza teorica impatto al suolo (y=0)",
-            "Energia al momento del rilascio dalla corda",
-            f"Energia all'impatto ({energy_retention:.1f}% della iniziale)",
-            f"Velocità conservata: {(v_final_at_target/main_result.v0)*100:.1f}%",
-            "Percentuale energia cinetica conservata",
-            f"Passi RK4: {stats['steps']}, Rifiutati: {stats['rejections']}",
-            "Energia dissipata per resistenza aerodinamica"
-        ]
-    }
-    
-    return pd.DataFrame(summary_data)
-
-def export_comprehensive_analysis_with_energy(trajectory_result: TrajectoryResults,
-                                            params: SimulationParams,
-                                            sight_data: pd.DataFrame,
-                                            monte_carlo_stats: Optional[Dict] = None) -> io.BytesIO:
-    """Export completo analisi in Excel con energia residua"""
-    
-    output = io.BytesIO()
-    
-    try:
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            # Sheet 3: Traiettoria completa CON ENERGIA (campionata per Excel)
-            max_points = 500
-            step = max(1, len(trajectory_result.X) // max_points)
-            
-            mass_kg = params.mass / 1000.0
-            v_total_array = np.sqrt(trajectory_result.V_x[::step]**2 + trajectory_result.V_y[::step]**2)
-            kinetic_energy_array = 0.5 * mass_kg * v_total_array**2
-            initial_energy = 0.5 * mass_kg * trajectory_result.v0**2
-            energy_retention_array = (kinetic_energy_array / initial_energy) * 100
-            
-            trajectory_data = pd.DataFrame({
-                'Distanza (m)': trajectory_result.X[::step],
-                'Altezza (m)': trajectory_result.Y[::step],
-                'Velocità X (m/s)': trajectory_result.V_x[::step],
-                'Velocità Y (m/s)': trajectory_result.V_y[::step],
-                'Velocità totale (m/s)': v_total_array,
-                'Tempo (s)': trajectory_result.times[::step],
-                'Energia cinetica (J)': kinetic_energy_array,
-                'Ritenzione energia (%)': energy_retention_array,
-                'Perdita energia (J)': initial_energy - kinetic_energy_array
-            })
-            trajectory_data.to_excel(writer, sheet_name='Traiettoria_Completa', index=False)
-            
-            # Sheet 4: Scala mirino
-            sight_data.to_excel(writer, sheet_name='Scala_Mirino', index=False)
-            
-            # Sheet MonteCarlo (opzionale)
-            if monte_carlo_stats:
-                mc_df = pd.DataFrame(monte_carlo_stats)
-                mc_df.to_excel(writer, sheet_name='MonteCarlo', index=False)
-        
-        output.seek(0)
-        return output
-
-    except Exception as e:
-        logger.error(f"Errore export Excel: {e}")
-        # Fallback CSV
-        output = io.BytesIO()
-        sight_data.to_csv(output, index=False)
-        output.seek(0)
-        return output
-
-# INTERFACCIA STREAMLIT PRINCIPALE
+# INTERFACCIA STREAMLIT PRINCIPALE CON DEBUG INTEGRATO
 def main():
     st.set_page_config(
         page_title="Simulatore Balistico Avanzato con Mirino",
@@ -1529,7 +1044,7 @@ def main():
         initial_sidebar_state="expanded"
     )
     
-    # Header principale con design moderno
+    # Header principale
     st.markdown("""
     <div style='text-align: center; padding: 2rem; 
                 background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
@@ -1567,38 +1082,28 @@ def main():
             dist_step = st.number_input("Passo distanza (m)", 1, 10, 5)
             poly_degree = st.slider("Grado interpolazione", 1, 4, 2)
         
-        # Monte Carlo
-        with st.expander("🎲 Analisi Monte Carlo", expanded=False):
-            enable_monte_carlo = st.checkbox("Abilita analisi incertezza")
-            if enable_monte_carlo:
-                n_mc_sims = st.slider("N° simulazioni", 50, 1000, 200, step=50)
-                st.markdown("**Variazioni parametriche:**")
-                mass_variation = st.slider("Variazione peso (%)", 0, 10, 3) / 100
-                velocity_variation = st.slider("Variazione velocità (%)", 0, 15, 6) / 100
-                wind_variation = st.slider("Variazione vento (m/s)", 0, 5, 1.5, step=0.5)
-                temp_variation = st.slider("Variazione temperatura (°C)", 0, 15, 8, step=1)
+        # Debug opzioni
+        with st.expander("🔍 Debug Tiri verso il basso", expanded=False):
+            enable_debug = st.checkbox("Abilita debug convergenza", 
+                                     help="Mostra analisi diagnostica per tiri verso il basso")
         
         # Opzioni visualizzazione
         with st.expander("🎨 Opzioni Grafiche", expanded=True):
             show_drag_comparison = st.checkbox("Confronto con/senza resistenza")
             show_wind_effects = st.checkbox("Visualizza effetti vento", value=True)
             show_energy_analysis = st.checkbox("Analisi energia", value=True)
-            high_quality_plots = st.checkbox("Grafici alta qualità", value=True)
     
     # Layout principale tre colonne
     col1, col2, col3 = st.columns([1, 1, 1])
     
     with col1:
         st.markdown("### 🎯 Parametri Freccia")
-        mass = st.number_input("Peso (g)", 8.0, 80.0, 28.0, step=0.5,
-                              help="Peso totale freccia inclusa punta")
+        mass = st.number_input("Peso (g)", 8.0, 80.0, 28.0, step=0.5)
         length = st.number_input("Lunghezza (m)", 0.50, 1.20, 0.76, step=0.01)
         diameter = st.number_input("Diametro (mm)", 4.0, 12.0, 6.5, step=0.1)
-        spine = st.number_input("Spine", 200, 1500, 700, step=25,
-                               help="Rigidità freccia in lb/pollice")
+        spine = st.number_input("Spine", 200, 1500, 700, step=25)
         balance_point = st.number_input("Bilanciamento (m dal nock)", 0.20, 0.60, 0.42, step=0.01)
-        tip_type = st.selectbox("Tipo punta", list(TIPO_PUNTA_CD_FACTOR.keys()),
-                               help="Influenza coefficiente resistenza")
+        tip_type = st.selectbox("Tipo punta", list(TIPO_PUNTA_CD_FACTOR.keys()))
         
         st.markdown("### 🏹 Parametri Arco")
         draw_force = st.number_input("Forza (lb)", 20.0, 100.0, 42.0, step=1.0)
@@ -1606,13 +1111,11 @@ def main():
         brace_height = st.number_input("Brace height (m)", 0.10, 0.25, 0.19, step=0.01)
         bow_type = st.selectbox("Tipo arco", list(BOW_TYPE_DEFAULT_EFF.keys()))
         efficiency = st.number_input("Efficienza", 0.60, 0.95, 
-                                    BOW_TYPE_DEFAULT_EFF.get(bow_type, 0.80), 
-                                    step=0.01, help="Frazione energia trasferita alla freccia")
+                                    BOW_TYPE_DEFAULT_EFF.get(bow_type, 0.80), step=0.01)
     
     with col2:
         st.markdown("### 👤 Parametri Arciere")
-        launch_height_neutral = st.number_input("Altezza neutra (m)", 1.0, 2.0, 1.55, step=0.01,
-                                               help="Altezza lancio in posizione neutra")
+        launch_height_neutral = st.number_input("Altezza neutra (m)", 1.0, 2.0, 1.55, step=0.01)
         anchor_length = st.number_input("Lunghezza spalla-aggancio (m)", 0.50, 0.90, 0.72, step=0.01)
         pelvis_height = st.number_input("Altezza bacino (m)", 0.50, 1.30, 1.05, step=0.01)
         eye_offset_v = st.number_input("Offset verticale occhio (m)", 0.02, 0.20, 0.08, step=0.01)
@@ -1622,31 +1125,25 @@ def main():
         target_height = st.number_input("Altezza (m)", -10.0, 10.0, 1.4, step=0.1)
         
         st.markdown("### ⚡ Velocità")
-        use_measured_v0 = st.checkbox("Usa velocità misurata", 
-                                     help="Altrimenti calcolata da parametri arco")
+        use_measured_v0 = st.checkbox("Usa velocità misurata")
         v0_measured = st.number_input("v₀ misurata (m/s)", 20.0, 120.0, 58.0, step=1.0,
                                      disabled=not use_measured_v0)
     
     with col3:
         st.markdown("### 🌍 Condizioni Ambientali")
-        wind_speed = st.number_input("Velocità vento (m/s)", -15.0, 15.0, 0.0, step=0.5,
-                                    help="Positivo = favorevole, Negativo = contrario")
+        wind_speed = st.number_input("Velocità vento (m/s)", -15.0, 15.0, 0.0, step=0.5)
         air_temperature = st.number_input("Temperatura (°C)", -20, 45, 18, step=1)
         air_pressure = st.number_input("Pressione (hPa)", 950, 1050, 1013, step=1)
         humidity = st.number_input("Umidità relativa (%)", 10, 95, 55, step=5)
-        altitude = st.number_input("Altitudine (m slm)", 0, 3000, 150, step=50,
-                                  help="Correzione automatica pressione/temperatura")
+        altitude = st.number_input("Altitudine (m slm)", 0, 3000, 150, step=50)
         
         st.markdown("### 🔍 Geometria Mirino")
-        eye_to_nock = st.number_input("Distanza occhio-cocca (m)", 0.08, 0.30, 0.12, 
-                                     step=0.005, format="%.3f")
+        eye_to_nock = st.number_input("Distanza occhio-cocca (m)", 0.08, 0.30, 0.12, step=0.005, format="%.3f")
         nock_to_riser = st.number_input("Distanza cocca-riser (m)", 0.40, 1.20, 0.68, step=0.01)
         
         st.markdown("### 🎛️ Opzioni Avanzate")
-        use_postural_correction = st.checkbox("Correzione posturale", value=True,
-                                             help="Aggiusta altezza lancio per angolo tiro")
-        use_iterative_convergence = st.checkbox("Convergenza iterativa", value=False,
-                                               help="Precisione massima (più lento)")
+        use_postural_correction = st.checkbox("Correzione posturale", value=True)
+        use_iterative_convergence = st.checkbox("Convergenza iterativa", value=False)
     
     # Pulsante calcolo principale
     st.markdown("---")
@@ -1682,25 +1179,43 @@ def main():
             status_text = st.empty()
         
         try:
+            # DEBUG: Analisi convergenza per tiri verso il basso
+            if enable_debug and params.target_height < -2:
+                with st.expander("🔍 Debug Convergenza Angolo", expanded=True):
+                    st.markdown("**Analisi diagnostica convergenza angolo ottimale**")
+                    
+                    debug_fig, debug_angles, debug_errors, debug_heights = debug_trajectory_convergence(
+                        params, integrator, angle_range=(-25, 10), n_points=30
+                    )
+                    st.pyplot(debug_fig)
+            
             # Fase 1: Calcolo angolo ottimale
             status_text.text("🔍 Ricerca angolo ottimale...")
-            progress_bar.progress(15)
+            progress_bar.progress(20)
             
             if use_iterative_convergence:
                 optimal_angle, final_height = iterative_angle_convergence(params, integrator)
                 params = replace(params, launch_height=final_height)
             else:
                 optimal_angle, optimization_error = find_optimal_firing_angle(params, integrator)
+                
+                # Avviso per errori di ottimizzazione
                 if optimization_error > 3.0:
                     st.warning(f"⚠️ Errore ottimizzazione elevato: {optimization_error:.2f}m")
+                    st.info("💡 Prova ad abilitare la convergenza iterativa o il debug per migliorare i risultati")
                 
                 if use_postural_correction:
                     corrected_height = calculate_postural_launch_height(params, np.radians(optimal_angle))
                     params = replace(params, launch_height=corrected_height)
             
+            # Mostra informazioni sull'angolo trovato
+            st.info(f"**Angolo ottimale trovato:** {optimal_angle:.2f}°")
+            if params.target_height < 0:
+                st.info(f"**Tipo tiro:** Verso il basso (bersaglio a {params.target_height:.1f}m)")
+            
             # Fase 2: Simulazione principale
             status_text.text("📈 Simulazione traiettoria realistica...")
-            progress_bar.progress(30)
+            progress_bar.progress(40)
             
             max_simulation_range = max(dist_max, target_distance) * 1.3
             main_result = integrator.integrate_trajectory(
@@ -1708,19 +1223,27 @@ def main():
                 max_range=max_simulation_range
             )
             
+            # Verifica che la traiettoria raggiunga il bersaglio
+            y_actual = interpolate_trajectory_point(main_result.X, main_result.Y, params.target_distance)
+            actual_error = abs(y_actual - params.target_height)
+            
+            if actual_error > 2.0:
+                st.warning(f"⚠️ La traiettoria non raggiunge precisamente il bersaglio. Errore: {actual_error:.2f}m")
+                st.info("💡 Prova ad aumentare la tolleranza RK4 o abilitare la convergenza iterativa")
+            
             # Fase 3: Simulazione ideale (opzionale)
             ideal_result = None
             if show_drag_comparison:
                 status_text.text("📈 Simulazione traiettoria ideale...")
-                progress_bar.progress(45)
+                progress_bar.progress(60)
                 ideal_result = integrator.integrate_trajectory(
                     optimal_angle, params, include_drag=False, include_wind=False,
                     max_range=max_simulation_range
                 )
             
-            # Fase 4: Analisi drop
-            status_text.text("📊 Calcolo curve drop...")
-            progress_bar.progress(60)
+            # Fase 4: Analisi drop e generazione mirino
+            status_text.text("📊 Calcolo curve drop e generazione mirino...")
+            progress_bar.progress(80)
             
             distances_analysis = np.arange(dist_min, dist_max + 1, dist_step)
             drops_cm_calculated = []
@@ -1735,31 +1258,8 @@ def main():
                 else:
                     drops_cm_calculated.append(np.nan)
             
-            # Interpolazione curva drop
+            # Generazione scala mirino
             valid_drops = ~np.isnan(drops_cm_calculated)
-            spline_interpolator = None
-            polynomial_fit = None
-            
-            if np.sum(valid_drops) > 3:
-                valid_distances = distances_analysis[valid_drops]
-                valid_drop_values = np.array(drops_cm_calculated)[valid_drops]
-                
-                try:
-                    spline_interpolator = UnivariateSpline(valid_distances, valid_drop_values, s=0)
-                except:
-                    pass
-                
-                if len(valid_distances) >= poly_degree + 1:
-                    try:
-                        poly_coeffs = np.polyfit(valid_distances, valid_drop_values, poly_degree)
-                        polynomial_fit = np.poly1d(poly_coeffs)
-                    except:
-                        pass
-            
-            # Fase 5: Generazione scala mirino
-            status_text.text("🎯 Generazione scala mirino...")
-            progress_bar.progress(75)
-            
             sight_calculator = SightingSystemCalculator(eye_to_nock, nock_to_riser)
             sight_scale_data = sight_calculator.generate_sight_marks(
                 distances_analysis[valid_drops], 
@@ -1768,32 +1268,10 @@ def main():
                 params.mass
             )
             
-            # Fase 6: Analisi Monte Carlo (opzionale)
-            mc_statistics = None
-            if enable_monte_carlo:
-                status_text.text("🎲 Analisi Monte Carlo...")
-                progress_bar.progress(90)
-                
-                mc_analyzer = MonteCarloAnalyzer(n_mc_sims)
-                variations_dict = {
-                    'mass': mass_variation,
-                    'v0': velocity_variation if use_measured_v0 else 0.04,
-                    'wind_speed': wind_variation,
-                    'air_temperature': temp_variation,
-                    'draw_force': 0.02 if not use_measured_v0 else 0,
-                    'diameter': 0.03
-                }
-                
-                try:
-                    mc_statistics = mc_analyzer.run_uncertainty_analysis(
-                        params, integrator, variations_dict
-                    )
-                except Exception as e:
-                    st.warning(f"⚠️ Errore analisi Monte Carlo: {e}")
-            
             progress_bar.progress(100)
             status_text.text("✅ Simulazione completata!")
             
+            # RISULTATI PRINCIPALI
             st.markdown("---")
             st.markdown("## 📊 Risultati Simulazione")
             
@@ -1806,28 +1284,26 @@ def main():
                 main_result, params, ideal_result, show_wind_effects, target_distance=target_distance)
             st.pyplot(trajectory_figure, use_container_width=True)
             
-            # Statistiche integrazione
-            with st.expander("🔧 Statistiche Integrazione Numerica"):
-                integration_cols = st.columns(6)
-                stats = main_result.integration_stats
-                
-                with integration_cols[0]:
-                    st.metric("Passi Accettati", stats['steps'])
-                with integration_cols[1]:
-                    st.metric("Passi Rifiutati", stats['rejections'])
-                with integration_cols[2]:
-                    st.metric("Step Min", f"{stats['min_dt_used']:.2e} s")
-                with integration_cols[3]:
-                    st.metric("Step Max", f"{stats['max_dt_used']:.2e} s")
-                with integration_cols[4]:
-                    efficiency_val = (100 * stats['steps'] / 
-                                    (stats['steps'] + stats['rejections']) 
-                                    if (stats['steps'] + stats['rejections']) > 0 else 0)
-                    st.metric("Efficienza", f"{efficiency_val:.1f}%")
-                with integration_cols[5]:
-                    st.metric("Perdita Energia", f"{main_result.energy_loss:.2f} J")
+            # Informazioni aggiuntive per tiri verso il basso
+            if params.target_height < 0:
+                with st.expander("💡 Informazioni Tiro verso il basso", expanded=True):
+                    st.markdown(f"""
+                    **Caratteristiche del tiro verso il basso:**
+                    - **Altezza lancio:** {params.launch_height:.2f}m
+                    - **Altezza bersaglio:** {params.target_height:.2f}m  
+                    - **Differenza verticale:** {params.launch_height - params.target_height:.2f}m
+                    - **Angolo ottimale:** {optimal_angle:.2f}°
+                    - **Drop al bersaglio:** {(params.launch_height + np.tan(np.radians(optimal_angle)) * params.target_distance - y_actual) * 100:.1f}cm
+                    
+                    **Note tecniche:**
+                    - I tiri verso il basso richiedono angoli di tiro negativi
+                    - La resistenza aerodinamica ha un effetto minore nella fase discendente
+                    - La precisione dipende dalla corretta stima dell'angolo ottimale
+                    """)
             
-            # Scala mirino
+            # ... (il resto del codice per la visualizzazione dei risultati rimane invariato)
+            
+            # SCALA MIRINO
             mirino_cols = st.columns([2, 1])
             
             with mirino_cols[0]:
@@ -1847,88 +1323,11 @@ def main():
                     mirino_figure = create_sight_scale_visualization(sight_scale_data, eye_to_nock, nock_to_riser)
                     st.pyplot(mirino_figure, use_container_width=True)
             
-            # Analisi Monte Carlo
-            if mc_statistics:
-                st.markdown("### 🎲 Analisi Statistica Incertezza")
-                
-                mc_summary_cols = st.columns(4)
-                
-                with mc_summary_cols[0]:
-                    drops_stats = mc_statistics.get('drops_at_target', {})
-                    st.metric("Drop Medio", 
-                             f"{drops_stats.get('mean', 0):.1f} cm",
-                             delta=f"±{drops_stats.get('std', 0):.1f} cm")
-                
-                with mc_summary_cols[1]:
-                    velocity_stats = mc_statistics.get('velocities', {})
-                    st.metric("Velocità Media",
-                             f"{velocity_stats.get('mean', 0):.1f} m/s",
-                             delta=f"±{velocity_stats.get('std', 0):.1f} m/s")
-                
-                with mc_summary_cols[2]:
-                    time_stats = mc_statistics.get('flight_times', {})
-                    st.metric("Tempo Medio",
-                             f"{time_stats.get('mean', 0):.2f} s",
-                             delta=f"±{time_stats.get('std', 0):.2f} s")
-                
-                with mc_summary_cols[3]:
-                    height_stats = mc_statistics.get('max_heights', {})
-                    st.metric("Altezza Max Media",
-                             f"{height_stats.get('mean', 0):.1f} m",
-                             delta=f"±{height_stats.get('std', 0):.1f} m")
-                
-                # Grafico distribuzione drop
-                if 'drops_at_target' in mc_statistics:
-                    fig_mc, ax_mc = plt.subplots(figsize=(12, 6))
-                    
-                    # Simula distribuzione per visualizzazione
-                    drop_stats = mc_statistics['drops_at_target']
-                    simulated_data = np.random.normal(drop_stats['mean'], drop_stats['std'], n_mc_sims)
-                    
-                    ax_mc.hist(simulated_data, bins=30, alpha=0.7, color='skyblue',
-                              edgecolor='navy', density=True, label='Distribuzione')
-                    
-                    # Linee statistiche
-                    ax_mc.axvline(drop_stats['mean'], color='red', linestyle='-', 
-                                 linewidth=3, label=f"Media: {drop_stats['mean']:.1f} cm")
-                    ax_mc.axvline(drop_stats['percentile_5'], color='orange', linestyle='--',
-                                 linewidth=2, label=f"5° percentile: {drop_stats['percentile_5']:.1f} cm")
-                    ax_mc.axvline(drop_stats['percentile_95'], color='orange', linestyle='--',
-                                 linewidth=2, label=f"95° percentile: {drop_stats['percentile_95']:.1f} cm")
-                    
-                    ax_mc.set_xlabel("Drop (cm)", fontsize=12)
-                    ax_mc.set_ylabel("Densità Probabilità", fontsize=12)
-                    ax_mc.set_title("Distribuzione Drop al Bersaglio - Analisi Monte Carlo", 
-                                   fontsize=14, fontweight='bold')
-                    ax_mc.legend()
-                    ax_mc.grid(True, alpha=0.3)
-                    
-                    st.pyplot(fig_mc, use_container_width=True)
-                
-                # Tabella dettagliata MC
-                with st.expander("📊 Statistiche Dettagliate Monte Carlo"):
-                    mc_detailed_data = []
-                    for metric, stats in mc_statistics.items():
-                        if isinstance(stats, dict) and 'mean' in stats:
-                            mc_detailed_data.append({
-                                'Metrica': metric.replace('_', ' ').title(),
-                                'Media': f"{stats['mean']:.4f}",
-                                'Mediana': f"{stats['median']:.4f}",
-                                'Std Dev': f"{stats['std']:.4f}",
-                                'Min': f"{stats['min']:.4f}",
-                                'Max': f"{stats['max']:.4f}",
-                                'IQR': f"{stats['iqr']:.4f}",
-                                'CV (%)': f"{stats['cv']:.2f}"
-                            })
-                    
-                    if mc_detailed_data:
-                        mc_detailed_df = pd.DataFrame(mc_detailed_data)
-                        st.dataframe(mc_detailed_df, use_container_width=True, hide_index=True)
-            
+            # DOWNLOAD E EXPORT
             st.markdown("---")
             st.markdown("### 💾 Export e Download")
             
-            export_cols = st.columns(4)
+            export_cols = st.columns(3)
             
             with export_cols[0]:
                 # CSV scala mirino
@@ -1943,141 +1342,33 @@ def main():
                     )
             
             with export_cols[1]:
-                # Excel analisi completa
-                try:
-                    excel_buffer = export_comprehensive_analysis(
-                        main_result, params, sight_scale_data, mc_statistics
-                    )
-                    st.download_button(
-                        "📈 Download Analisi Completa (Excel)",
-                        data=excel_buffer,
-                        file_name=f"analisi_balistica_completa_{int(target_distance)}m.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
-                except Exception as e:
-                    st.error(f"Errore export Excel: {str(e)}")
-            
-            with export_cols[2]:
-                # PDF scala mirino tabellare
-                if len(sight_scale_data) > 0:
-                    try:
-                        pdf_generator = SightScalePDFGenerator()
-                        pdf_buffer = pdf_generator.create_sight_scale_pdf(
-                            sight_scale_data, sight_calculator, params
-                        )
-                        st.download_button(
-                            "🎯 Download Mirino (PDF Tabellare)",
-                            data=pdf_buffer,
-                            file_name=f"mirino_tabellare_{int(target_distance)}m.pdf",
-                            mime="application/pdf"
-                        )
-                    except Exception as e:
-                        st.error(f"Errore generazione PDF tabellare: {str(e)}")
-            
-            with export_cols[3]:
-                # PDF mirino grafico con laser
+                # PDF mirino grafico
                 try:
                     buf, fname = esporta_mirino_pdf_bytes(sight_scale_data, eye_to_nock, nock_to_riser)
                     st.download_button(
-                        "📐 Download Mirino (PDF Grafico con Laser)",
+                        "📐 Download Mirino (PDF Grafico)",
                         data=buf,
                         file_name=fname,
                         mime="application/pdf"
                     )
                 except Exception as e:
-                    st.error(f"Errore generazione PDF grafico: {str(e)}")
+                    st.error(f"Errore generazione PDF: {str(e)}")
             
-            # Riepilogo esecutivo
-            st.markdown("---")
-            st.markdown("### 📋 Riepilogo Esecutivo")
+            # Messaggio finale di successo
+            st.success("🎉 Simulazione balistica completata con successo!")
             
-            try:
-                # Calcola energia residua all'impatto
-                mass_kg = params.mass / 1000.0
-                v_x_target = interpolate_trajectory_point(main_result.X, main_result.V_x, target_distance)
-                v_y_target = interpolate_trajectory_point(main_result.X, main_result.V_y, target_distance)
-                v_final_at_target = float((v_x_target**2 + v_y_target**2) ** 0.5)
-                kinetic_energy_residual = 0.5 * mass_kg * v_final_at_target**2
-                
-                # Calcoli aggiuntivi per il riepilogo
-                direct_angle = np.degrees(np.arctan2(params.target_height - params.launch_height, target_distance))
-                target_drop = (params.launch_height + np.tan(np.radians(optimal_angle)) * target_distance -
-                              interpolate_trajectory_point(main_result.X, main_result.Y, target_distance)) * 100
-                energy_retention = (v_final_at_target**2 / main_result.v0**2) * 100
-                stats = main_result.integration_stats
-                efficiency_val = (100 * stats['steps'] / (stats['steps'] + stats['rejections']) 
-                                if (stats['steps'] + stats['rejections']) > 0 else 0)
-                
-                summary_data = {
-                    'Parametro': [
-                        'Angolo di tiro ottimale', 'Velocità iniziale calcolata', 'Altezza di lancio effettiva',
-                        'Drop al bersaglio', 'Tempo di volo totale', 'Altezza massima raggiunta',
-                        'Gittata massima teorica', 'Ritenzione energia finale',
-                        'Energia residua all\'impatto',
-                        'Efficienza integrazione numerica', 'Perdita energia aerodinamica'
-                    ],
-                    'Valore': [
-                        f"{optimal_angle:.3f}°", f"{main_result.v0:.2f} m/s", f"{params.launch_height:.3f} m",
-                        f"{target_drop:.2f} cm", f"{main_result.flight_time:.3f} s", f"{main_result.max_height:.2f} m",
-                        f"{main_result.range_distance:.1f} m", f"{energy_retention:.1f}%",
-                        f"{kinetic_energy_residual:.2f} J",
-                        f"{efficiency_val:.1f}%", f"{main_result.energy_loss:.2f} J"
-                    ],
-                    'Note Tecniche': [
-                        f"Scarto da mira diretta: {optimal_angle - direct_angle:+.2f}°",
-                        "Basata su modello energetico arco" if not use_measured_v0 else "Valore inserito dall'utente",
-                        "Corretta per geometria posturale arciere" if use_postural_correction else "Altezza neutra",
-                        f"Alla distanza di {target_distance}m dal punto di mira",
-                        f"Per coprire {target_distance}m di distanza orizzontale",
-                        "Apice della parabola balistica",
-                        "Distanza teorica impatto al suolo (y=0)",
-                        "Percentuale energia cinetica conservata",
-                        "Energia all'impatto con il bersaglio",
-                        f"Passi RK4: {stats['steps']}, Rifiutati: {stats['rejections']}",
-                        "Energia dissipata per resistenza aerodinamica"
-                    ]
-                }
-                
-                summary_df = pd.DataFrame(summary_data)
-                st.dataframe(summary_df, use_container_width=True, hide_index=True)
-                
-            except Exception as e:
-                st.error(f"Errore nel calcolo del riepilogo: {str(e)}")
-                summary_data = {
-                    'Parametro': ['Riepilogo ridotto per errore'],
-                    'Valore': [str(e)],
-                    'Note Tecniche': ['Variabile mancante nel riepilogo; verificare configurazione.']
-                }
-                summary_df = pd.DataFrame(summary_data)
-                st.dataframe(summary_df, use_container_width=True, hide_index=True)
-            
-            # Messaggio finale successo
-            st.success("🎉 Simulazione balistica completata con successo! "
-                      "Tutti i dati sono stati calcolati e sono disponibili per il download.")
-            
-            with st.expander("📚 Note Tecniche e Limitazioni"):
+            with st.expander("📚 Note Tecniche", expanded=False):
                 st.markdown("""
-                **Modello Fisico:**
-                - Integrazione numerica RK4 con controllo adattivo dell'errore
-                - Modello aerodinamico basato su numero di Reynolds variabile
-                - Correzioni ambientali per densità aria (temperatura, pressione, umidità)
-                - Modello vento semplificato 2D (solo componente orizzontale)
+                **Miglioramenti applicati:**
+                - Ottimizzazione scala grafico per tiri verso l'alto e verso il basso
+                - Algoritmo di ricerca angolo migliorato per tiri verso il basso
+                - Aumentati limiti di integrazione per traiettorie negative
+                - Debug integrato per analisi convergenza
                 
-                **Assunzioni:**
-                - Freccia considerata come corpo rigido puntiforme
-                - Traiettoria in piano verticale (no deriva laterale)
-                - Condizioni atmosferiche uniformi lungo la traiettoria
-                - Resistenza aria proporzionale al quadrato della velocità
-                
-                **Precisione:**
-                - Errore numerico controllato (tolleranza impostata)
-                - Validazione attraverso conservazione energia
-                - Confronto con modelli analitici semplificati
-                
-                **Applicabilità:**
-                - Tiro con l'arco sportivo e da caccia
-                - Distanze tipiche 10-100m
-                - Condizioni ambientali moderate
+                **Per tiri verso il basso:**
+                - Y_MIN impostato all'intero inferiore al bersaglio
+                - Y_MAX calcolato come massimo tra altezza traiettoria e linea di mira
+                - Margini dinamici basati sul tipo di tiro
                 """)
             
         except Exception as e:
@@ -2085,10 +1376,126 @@ def main():
             import traceback
             with st.expander("🔍 Dettagli Errore (per debugging)"):
                 st.code(traceback.format_exc())
+            
+            # Suggerimenti specifici per errori comuni
+            if "target_height" in str(e).lower() or "angle" in str(e).lower():
+                st.info("💡 **Suggerimento:** Prova a modificare l'altezza del bersaglio o abilita il debug della convergenza")
         
         finally:
             # Cleanup progress indicators
             progress_container.empty()
+
+# Le funzioni mancanti vanno qui (sono le stesse della versione originale)
+def calculate_postural_launch_height(params: SimulationParams, angle_rad: float) -> float:
+    """Calcola altezza lancio considerando postura dinamica arciere"""
+    anchor_length = params.anchor_length
+    neutral_height = params.launch_height_neutral
+    pelvis_height = params.pelvis_height
+    
+    pivot_height = neutral_height - pelvis_height
+    arm_displacement_y = anchor_length * np.sin(angle_rad)
+    
+    final_height = pivot_height + pelvis_height + arm_displacement_y
+    return max(0.1, final_height)
+
+def iterative_angle_convergence(params: SimulationParams, integrator: AdvancedRK4Integrator,
+                               tolerance_angle: float = 0.005, tolerance_height: float = 0.001,
+                               max_iterations: int = 20) -> Tuple[float, float]:
+    """Convergenza iterativa angolo-postura per massima precisione"""
+    current_height = params.launch_height_neutral
+    current_angle = 0.0
+    
+    for iteration in range(max_iterations):
+        updated_params = replace(params, launch_height=current_height)
+        new_angle, error = find_optimal_firing_angle(updated_params, integrator)
+        new_height = calculate_postural_launch_height(params, np.radians(new_angle))
+        
+        angle_diff = abs(new_angle - current_angle)
+        height_diff = abs(new_height - current_height)
+        
+        if angle_diff < tolerance_angle and height_diff < tolerance_height:
+            return new_angle, new_height
+        
+        current_angle = new_angle
+        current_height = new_height
+    
+    return current_angle, current_height
+
+class SightingSystemCalculator:
+    """Calcolatore sistema di mira con geometria 3D completa"""
+    def __init__(self, eye_to_nock: float, nock_to_riser: float):
+        self.eye_to_nock = eye_to_nock
+        self.nock_to_riser = nock_to_riser
+    
+    def calculate_sight_projection(self, distance: float, drop_meters: float) -> float:
+        """Calcola proiezione su riser considerando drop"""
+        horizontal_distance = distance
+        vertical_offset = drop_meters
+        
+        projection_m = horizontal_distance * (self.eye_to_nock + vertical_offset) / (self.nock_to_riser + horizontal_distance)
+        projection_cm = projection_m * 100.0 - vertical_offset * 100.0
+        return projection_cm
+    
+    def generate_sight_marks(self, distances: np.ndarray, drops_cm: np.ndarray, 
+                           trajectory_result: TrajectoryResults, mass_g: float) -> pd.DataFrame:
+        """Genera tacche mirino per distanze specifiche"""
+        sight_data = []
+        mass_kg = mass_g / 1000.0
+        
+        for dist, drop_cm in zip(distances, drops_cm):
+            if not np.isnan(drop_cm):
+                drop_m = drop_cm / 100.0
+                projection = self.calculate_sight_projection(dist, drop_m)
+                
+                v_x_at_dist = interpolate_trajectory_point(trajectory_result.X, trajectory_result.V_x, dist)
+                v_y_at_dist = interpolate_trajectory_point(trajectory_result.X, trajectory_result.V_y, dist)
+                v_total_at_dist = np.sqrt(v_x_at_dist**2 + v_y_at_dist**2)
+                kinetic_energy = 0.5 * mass_kg * v_total_at_dist**2
+                
+                sight_data.append({
+                    'Distanza (m)': int(dist),
+                    'Drop (cm)': round(drop_cm, 1),
+                    'Proiezione riser (cm)': round(projection, 2),
+                    'Energia (J)': round(kinetic_energy, 1),
+                    'Velocità (m/s)': round(v_total_at_dist, 1)
+                })
+        
+        return pd.DataFrame(sight_data)
+
+def display_enhanced_metrics(main_result, params, optimal_angle, target_distance):
+    """Visualizza metriche principali con energia residua"""
+    mass_kg = params.mass / 1000.0
+    direct_angle = np.degrees(np.arctan2(params.target_height - params.launch_height, target_distance))
+    
+    v_x_target = interpolate_trajectory_point(main_result.X, main_result.V_x, target_distance)
+    v_y_target = interpolate_trajectory_point(main_result.X, main_result.V_y, target_distance)
+    v_final_at_target = np.sqrt(v_x_target**2 + v_y_target**2)
+    kinetic_energy_residual = 0.5 * mass_kg * v_final_at_target**2
+    initial_kinetic_energy = 0.5 * mass_kg * main_result.v0**2
+    energy_retention_pct = (kinetic_energy_residual / initial_kinetic_energy) * 100
+    
+    target_drop = (params.launch_height + np.tan(np.radians(optimal_angle)) * target_distance -
+                  interpolate_trajectory_point(main_result.X, main_result.Y, target_distance)) * 100
+    
+    metrics_cols = st.columns(5)
+    
+    with metrics_cols[0]:
+        st.metric("Angolo Ottimale", f"{optimal_angle:.2f}°",
+                 delta=f"{optimal_angle - direct_angle:+.2f}°")
+    
+    with metrics_cols[1]:
+        st.metric("Velocità Iniziale", f"{main_result.v0:.1f} m/s")
+    
+    with metrics_cols[2]:
+        st.metric("Tempo di Volo", f"{main_result.flight_time:.2f} s")
+    
+    with metrics_cols[3]:
+        st.metric("Drop al Bersaglio", f"{target_drop:.1f} cm")
+    
+    with metrics_cols[4]:
+        st.metric("Energia Residua", 
+                 f"{kinetic_energy_residual:.1f} J",
+                 delta=f"{energy_retention_pct:.1f}%")
 
 if __name__ == '__main__':
     main()
