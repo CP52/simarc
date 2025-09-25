@@ -204,8 +204,7 @@ def reynolds_number_enhanced(v: float, diameter_mm: float, params: SimulationPar
     
     return rho * v * d_m / mu
 
-def enhanced_drag_coefficient(v: float, diameter_mm: float, angle_of_attack_deg: float, 
-                            tip_type: str
+def enhanced_drag_coefficient(v: float, diameter_mm: float, angle_of_attack_deg: float,
     fletching_type: str = 'Grande 3x5', params: SimulationParams) -> float:
     """Modello Cd avanzato basato su CFD e dati sperimentali (Litz, 2017)"""
     Re = reynolds_number_enhanced(v, diameter_mm, params)
