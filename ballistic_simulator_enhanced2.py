@@ -61,6 +61,16 @@ TIPO_PUNTA_CD_FACTOR = {
     "Blunt": 1.45                        # Punta piatta per small game
 }
 
+
+
+# Coefficienti aerodinamici per impennatura (basati su dati sperimentali Kooi 1997, Litz 2017)
+TIPO_IMPENNATURA_CD_FACTOR = {
+    "Nessuna": 1.0,          # Asta liscia (teorico)
+    "Low-profile": 1.4,      # Alette corte e basse
+    "Standard": 1.8,         # 3x3 pollici o simili
+    "Flu-flu": 3.0           # Grande impennatura, elevato drag
+}
+
 BOW_TYPE_DEFAULT_EFF = {
     "longbow": 0.73,           # Efficienza tradizionale
     "ricurvo": 0.84,          # Migliorata geometria
@@ -81,6 +91,7 @@ class SimulationParams:
     diameter: float               # [mm]
     balance_point: float          # [m] dal nock
     tip_type: str
+    fletching_type: str = 'Standard'
     
     # Parametri arco
     draw_force: float             # [lb]
@@ -193,7 +204,8 @@ def reynolds_number_enhanced(v: float, diameter_mm: float, params: SimulationPar
     return rho * v * d_m / mu
 
 def enhanced_drag_coefficient(v: float, diameter_mm: float, angle_of_attack_deg: float, 
-                            tip_type: str, params: SimulationParams) -> float:
+                            tip_type: str
+    fletching_type: str = 'Standard', params: SimulationParams) -> float:
     """Modello Cd avanzato basato su CFD e dati sperimentali (Litz, 2017)"""
     Re = reynolds_number_enhanced(v, diameter_mm, params)
     
@@ -226,7 +238,8 @@ def enhanced_drag_coefficient(v: float, diameter_mm: float, angle_of_attack_deg:
                                                         params.humidity) / 
                                    PhysicalConstants.AIR_DENSITY_STP - 1)
     
-    return Cd_base * angle_factor * tip_factor * density_factor
+        fletching_factor = TIPO_IMPENNATURA_CD_FACTOR.get(params.fletching_type, 1.0)
+    return Cd_base * angle_factor * tip_factor * fletching_factor * density_factor
 
 def calculate_velocity_enhanced(params: SimulationParams) -> float:
     """Calcolo velocità con modello energetico avanzato"""
@@ -1281,6 +1294,7 @@ def main():
         spine = st.number_input("Spine", 200, 1500, 700, step=25)
         balance_point = st.number_input("Bilanciamento (m dal nock)", 0.20, 0.60, 0.42, step=0.01)
         tip_type = st.selectbox("Tipo punta", list(TIPO_PUNTA_CD_FACTOR.keys()))
+        fletching_type = st.selectbox("Tipo impennatura", list(TIPO_IMPENNATURA_CD_FACTOR.keys()))
         
         st.markdown("### 🏹 Parametri Arco")
         draw_force = st.number_input("Forza (lb)", 20.0, 100.0, 42.0, step=1.0)
@@ -1330,7 +1344,7 @@ def main():
         try:
             params = SimulationParams(
                 mass=mass, length=length, spine=spine, diameter=diameter,
-                balance_point=balance_point, tip_type=tip_type,
+                balance_point=balance_point, tip_type=tip_type, fletching_type=fletching_type,
                 draw_force=draw_force, draw_length=draw_length, brace_height=brace_height,
                 efficiency=efficiency, bow_type=bow_type,
                 launch_height_neutral=launch_height_neutral,
