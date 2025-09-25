@@ -92,7 +92,6 @@ class SimulationParams:
     diameter: float               # [mm]
     balance_point: float          # [m] dal nock
     tip_type: str
-    fletching_type: str = 'Grande 3x5'
     
     # Parametri arco
     draw_force: float             # [lb]
@@ -116,6 +115,7 @@ class SimulationParams:
     v0: float                     # [m/s]
     
     # Parametri ambientali avanzati
+    fletching_type: str = 'Grande 3x5'
     wind_speed: float = 0.0       # [m/s] positivo=favorevole
     air_temperature: float = 15.0  # [°C] Standard ISA
     air_pressure: float = 1013.25  # [hPa] Pressione standard
@@ -241,7 +241,7 @@ def enhanced_drag_coefficient(v: float, diameter_mm: float, angle_of_attack_deg:
                                                         params.humidity) / 
                                    PhysicalConstants.AIR_DENSITY_STP - 1)
     
-    fletching_factor = TIPO_IMPENNATURA_CD_FACTOR.get(params.fletching_type, 1.0)
+    fletching_factor = TIPO_IMPENNATURA_CD_FACTOR.get(params.fletching_type, 1.0) 
     return Cd_base * angle_factor * tip_factor * fletching_factor * density_factor
 
 def calculate_velocity_enhanced(params: SimulationParams) -> float:
