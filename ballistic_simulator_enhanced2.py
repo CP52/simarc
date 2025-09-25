@@ -984,8 +984,8 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     ax_drop.set_title("Curva Drop", fontsize=12, fontweight='bold')
     
     # Zona comfort tiro (±5cm)
-    ax_drop.axhspan(-5, 5, alpha=0.2, color='green', label='Zona comfort (±5cm)')
-    ax_drop.legend(fontsize=9)
+    #ax_drop.axhspan(-5, 5, alpha=0.2, color='green', label='Zona comfort (±5cm)')
+    #ax_drop.legend(fontsize=9)
     
     plt.tight_layout()
     return fig
