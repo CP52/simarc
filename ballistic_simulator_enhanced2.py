@@ -990,7 +990,72 @@ def create_comprehensive_trajectory_plot(main_result: TrajectoryResults,
     plt.tight_layout()
     return fig
 
-# ... (il resto del codice rimane invariato, incluse le funzioni di supporto e l'interfaccia Streamlit)
+# FUNZIONE MANCANTE: VISUALIZZAZIONE SCALA MIRINO
+def create_sight_scale_visualization(sight_data: pd.DataFrame, eye_to_nock: float, nock_to_riser: float, laser_distance: float = 30.0) -> plt.Figure:
+    """Visualizzazione scala mirino interattiva"""
+    
+    fig, ax = plt.subplots(figsize=(6, 10))
+    
+    if len(sight_data) == 0:
+        ax.text(0.5, 0.5, "Nessun dato disponibile", 
+               transform=ax.transAxes, ha='center', va='center',
+               fontsize=14, color='red')
+        return fig
+    
+    # Estrai dati
+    distances = sight_data['Distanza (m)'].values
+    projections = sight_data['Proiezione riser (cm)'].values
+    
+    # Linea centrale riser
+    y_range = [projections.min() - 3, projections.max() + 3]
+    ax.axvline(x=0, ymin=0, ymax=1, color='black', linewidth=6, alpha=0.8)
+    
+    # Tacche distanze con colori graduali
+    colors_grad = plt.cm.viridis(np.linspace(0, 1, len(distances)))
+    
+    for i, (dist, proj, color) in enumerate(zip(distances, projections, colors_grad)):
+        # Tacca orizzontale
+        ax.hlines(proj, xmin=-1.5, xmax=1.5, colors=color, linewidth=3, alpha=0.9)
+        
+        # Etichetta distanza
+        side = 1 if i % 2 == 0 else -1
+        ax.text(side * 2.2, proj, f"{int(dist)}m", 
+               va='center', ha='left' if side > 0 else 'right',
+               fontsize=11, fontweight='bold', color=color)
+        
+        # Drop info
+        drop_val = sight_data.iloc[i]['Drop (cm)']
+        ax.text(side * 3.5, proj, f"({drop_val:.1f}cm)", 
+               va='center', ha='left' if side > 0 else 'right',
+               fontsize=9, style='italic', alpha=0.7)
+
+    # Laser geometrico: raggio dalla punta della freccia
+    def _y_cm(x: float, o: float, t: float, d: float = 0.0) -> float:
+        u = (o + d) / (t + x)
+        y_calc = 100.0 * x * (u / np.sqrt(1 + u**2))  # cm sul riser
+        return y_calc - d * 100.0
+    
+    y_laser = _y_cm(laser_distance, eye_to_nock, nock_to_riser, d=0.0)
+    # Disegna il laser come stella rossa sulla colonna del riser (x=0)
+    ax.scatter(0, y_laser, marker='*', s=220, edgecolors='darkred', color='red', zorder=10)
+    ax.text(2.2, y_laser, f"Laser {int(laser_distance)} m", va='center', fontsize=11, color='red', fontweight='bold')
+    
+    # Allarga l'asse Y se necessario per includere il laser
+    y_min_cur, y_max_cur = ax.get_ylim()
+    new_min = min(y_min_cur, y_laser - 2)
+    new_max = max(y_max_cur, y_laser + 2)
+    ax.set_ylim(new_min, new_max)
+
+    # Stile grafico
+    ax.set_xlim(-5, 5)
+    ax.set_ylabel("Posizione su Riser (cm)", fontsize=14, fontweight='bold')
+    ax.set_title("Scala Mirino Verticale", fontsize=16, fontweight='bold', pad=20)
+    ax.grid(True, axis='y', linestyle='--', alpha=0.4)
+    ax.set_xticks([])  # Rimuovi tick X
+    ax.set_facecolor('#f8f9fa')
+    
+    plt.tight_layout()
+    return fig
 
 # FUNZIONE DI DEBUG PER TIRI VERSO IL BASSO
 def debug_trajectory_convergence(params: SimulationParams, integrator: AdvancedRK4Integrator, 
@@ -1034,6 +1099,118 @@ def debug_trajectory_convergence(params: SimulationParams, integrator: AdvancedR
     
     plt.tight_layout()
     return fig, angles, errors, final_heights
+
+# FUNZIONI DI SUPPORTO GEOMETRICO
+def calculate_postural_launch_height(params: SimulationParams, angle_rad: float) -> float:
+    """Calcola altezza lancio considerando postura dinamica arciere"""
+    anchor_length = params.anchor_length
+    neutral_height = params.launch_height_neutral
+    pelvis_height = params.pelvis_height
+    
+    pivot_height = neutral_height - pelvis_height
+    arm_displacement_y = anchor_length * np.sin(angle_rad)
+    
+    final_height = pivot_height + pelvis_height + arm_displacement_y
+    return max(0.1, final_height)
+
+def iterative_angle_convergence(params: SimulationParams, integrator: AdvancedRK4Integrator,
+                               tolerance_angle: float = 0.005, tolerance_height: float = 0.001,
+                               max_iterations: int = 20) -> Tuple[float, float]:
+    """Convergenza iterativa angolo-postura per massima precisione"""
+    current_height = params.launch_height_neutral
+    current_angle = 0.0
+    
+    for iteration in range(max_iterations):
+        updated_params = replace(params, launch_height=current_height)
+        new_angle, error = find_optimal_firing_angle(updated_params, integrator)
+        new_height = calculate_postural_launch_height(params, np.radians(new_angle))
+        
+        angle_diff = abs(new_angle - current_angle)
+        height_diff = abs(new_height - current_height)
+        
+        if angle_diff < tolerance_angle and height_diff < tolerance_height:
+            return new_angle, new_height
+        
+        current_angle = new_angle
+        current_height = new_height
+    
+    return current_angle, current_height
+
+class SightingSystemCalculator:
+    """Calcolatore sistema di mira con geometria 3D completa"""
+    def __init__(self, eye_to_nock: float, nock_to_riser: float):
+        self.eye_to_nock = eye_to_nock
+        self.nock_to_riser = nock_to_riser
+    
+    def calculate_sight_projection(self, distance: float, drop_meters: float) -> float:
+        """Calcola proiezione su riser considerando drop"""
+        horizontal_distance = distance
+        vertical_offset = drop_meters
+        
+        projection_m = horizontal_distance * (self.eye_to_nock + vertical_offset) / (self.nock_to_riser + horizontal_distance)
+        projection_cm = projection_m * 100.0 - vertical_offset * 100.0
+        return projection_cm
+    
+    def generate_sight_marks(self, distances: np.ndarray, drops_cm: np.ndarray, 
+                           trajectory_result: TrajectoryResults, mass_g: float) -> pd.DataFrame:
+        """Genera tacche mirino per distanze specifiche"""
+        sight_data = []
+        mass_kg = mass_g / 1000.0
+        
+        for dist, drop_cm in zip(distances, drops_cm):
+            if not np.isnan(drop_cm):
+                drop_m = drop_cm / 100.0
+                projection = self.calculate_sight_projection(dist, drop_m)
+                
+                v_x_at_dist = interpolate_trajectory_point(trajectory_result.X, trajectory_result.V_x, dist)
+                v_y_at_dist = interpolate_trajectory_point(trajectory_result.X, trajectory_result.V_y, dist)
+                v_total_at_dist = np.sqrt(v_x_at_dist**2 + v_y_at_dist**2)
+                kinetic_energy = 0.5 * mass_kg * v_total_at_dist**2
+                
+                sight_data.append({
+                    'Distanza (m)': int(dist),
+                    'Drop (cm)': round(drop_cm, 1),
+                    'Proiezione riser (cm)': round(projection, 2),
+                    'Energia (J)': round(kinetic_energy, 1),
+                    'Velocità (m/s)': round(v_total_at_dist, 1)
+                })
+        
+        return pd.DataFrame(sight_data)
+
+def display_enhanced_metrics(main_result, params, optimal_angle, target_distance):
+    """Visualizza metriche principali con energia residua"""
+    mass_kg = params.mass / 1000.0
+    direct_angle = np.degrees(np.arctan2(params.target_height - params.launch_height, target_distance))
+    
+    v_x_target = interpolate_trajectory_point(main_result.X, main_result.V_x, target_distance)
+    v_y_target = interpolate_trajectory_point(main_result.X, main_result.V_y, target_distance)
+    v_final_at_target = np.sqrt(v_x_target**2 + v_y_target**2)
+    kinetic_energy_residual = 0.5 * mass_kg * v_final_at_target**2
+    initial_kinetic_energy = 0.5 * mass_kg * main_result.v0**2
+    energy_retention_pct = (kinetic_energy_residual / initial_kinetic_energy) * 100
+    
+    target_drop = (params.launch_height + np.tan(np.radians(optimal_angle)) * target_distance -
+                  interpolate_trajectory_point(main_result.X, main_result.Y, target_distance)) * 100
+    
+    metrics_cols = st.columns(5)
+    
+    with metrics_cols[0]:
+        st.metric("Angolo Ottimale", f"{optimal_angle:.2f}°",
+                 delta=f"{optimal_angle - direct_angle:+.2f}°")
+    
+    with metrics_cols[1]:
+        st.metric("Velocità Iniziale", f"{main_result.v0:.1f} m/s")
+    
+    with metrics_cols[2]:
+        st.metric("Tempo di Volo", f"{main_result.flight_time:.2f} s")
+    
+    with metrics_cols[3]:
+        st.metric("Drop al Bersaglio", f"{target_drop:.1f} cm")
+    
+    with metrics_cols[4]:
+        st.metric("Energia Residua", 
+                 f"{kinetic_energy_residual:.1f} J",
+                 delta=f"{energy_retention_pct:.1f}%")
 
 # INTERFACCIA STREAMLIT PRINCIPALE CON DEBUG INTEGRATO
 def main():
@@ -1301,8 +1478,6 @@ def main():
                     - La precisione dipende dalla corretta stima dell'angolo ottimale
                     """)
             
-            # ... (il resto del codice per la visualizzazione dei risultati rimane invariato)
-            
             # SCALA MIRINO
             mirino_cols = st.columns([2, 1])
             
@@ -1384,118 +1559,6 @@ def main():
         finally:
             # Cleanup progress indicators
             progress_container.empty()
-
-# Le funzioni mancanti vanno qui (sono le stesse della versione originale)
-def calculate_postural_launch_height(params: SimulationParams, angle_rad: float) -> float:
-    """Calcola altezza lancio considerando postura dinamica arciere"""
-    anchor_length = params.anchor_length
-    neutral_height = params.launch_height_neutral
-    pelvis_height = params.pelvis_height
-    
-    pivot_height = neutral_height - pelvis_height
-    arm_displacement_y = anchor_length * np.sin(angle_rad)
-    
-    final_height = pivot_height + pelvis_height + arm_displacement_y
-    return max(0.1, final_height)
-
-def iterative_angle_convergence(params: SimulationParams, integrator: AdvancedRK4Integrator,
-                               tolerance_angle: float = 0.005, tolerance_height: float = 0.001,
-                               max_iterations: int = 20) -> Tuple[float, float]:
-    """Convergenza iterativa angolo-postura per massima precisione"""
-    current_height = params.launch_height_neutral
-    current_angle = 0.0
-    
-    for iteration in range(max_iterations):
-        updated_params = replace(params, launch_height=current_height)
-        new_angle, error = find_optimal_firing_angle(updated_params, integrator)
-        new_height = calculate_postural_launch_height(params, np.radians(new_angle))
-        
-        angle_diff = abs(new_angle - current_angle)
-        height_diff = abs(new_height - current_height)
-        
-        if angle_diff < tolerance_angle and height_diff < tolerance_height:
-            return new_angle, new_height
-        
-        current_angle = new_angle
-        current_height = new_height
-    
-    return current_angle, current_height
-
-class SightingSystemCalculator:
-    """Calcolatore sistema di mira con geometria 3D completa"""
-    def __init__(self, eye_to_nock: float, nock_to_riser: float):
-        self.eye_to_nock = eye_to_nock
-        self.nock_to_riser = nock_to_riser
-    
-    def calculate_sight_projection(self, distance: float, drop_meters: float) -> float:
-        """Calcola proiezione su riser considerando drop"""
-        horizontal_distance = distance
-        vertical_offset = drop_meters
-        
-        projection_m = horizontal_distance * (self.eye_to_nock + vertical_offset) / (self.nock_to_riser + horizontal_distance)
-        projection_cm = projection_m * 100.0 - vertical_offset * 100.0
-        return projection_cm
-    
-    def generate_sight_marks(self, distances: np.ndarray, drops_cm: np.ndarray, 
-                           trajectory_result: TrajectoryResults, mass_g: float) -> pd.DataFrame:
-        """Genera tacche mirino per distanze specifiche"""
-        sight_data = []
-        mass_kg = mass_g / 1000.0
-        
-        for dist, drop_cm in zip(distances, drops_cm):
-            if not np.isnan(drop_cm):
-                drop_m = drop_cm / 100.0
-                projection = self.calculate_sight_projection(dist, drop_m)
-                
-                v_x_at_dist = interpolate_trajectory_point(trajectory_result.X, trajectory_result.V_x, dist)
-                v_y_at_dist = interpolate_trajectory_point(trajectory_result.X, trajectory_result.V_y, dist)
-                v_total_at_dist = np.sqrt(v_x_at_dist**2 + v_y_at_dist**2)
-                kinetic_energy = 0.5 * mass_kg * v_total_at_dist**2
-                
-                sight_data.append({
-                    'Distanza (m)': int(dist),
-                    'Drop (cm)': round(drop_cm, 1),
-                    'Proiezione riser (cm)': round(projection, 2),
-                    'Energia (J)': round(kinetic_energy, 1),
-                    'Velocità (m/s)': round(v_total_at_dist, 1)
-                })
-        
-        return pd.DataFrame(sight_data)
-
-def display_enhanced_metrics(main_result, params, optimal_angle, target_distance):
-    """Visualizza metriche principali con energia residua"""
-    mass_kg = params.mass / 1000.0
-    direct_angle = np.degrees(np.arctan2(params.target_height - params.launch_height, target_distance))
-    
-    v_x_target = interpolate_trajectory_point(main_result.X, main_result.V_x, target_distance)
-    v_y_target = interpolate_trajectory_point(main_result.X, main_result.V_y, target_distance)
-    v_final_at_target = np.sqrt(v_x_target**2 + v_y_target**2)
-    kinetic_energy_residual = 0.5 * mass_kg * v_final_at_target**2
-    initial_kinetic_energy = 0.5 * mass_kg * main_result.v0**2
-    energy_retention_pct = (kinetic_energy_residual / initial_kinetic_energy) * 100
-    
-    target_drop = (params.launch_height + np.tan(np.radians(optimal_angle)) * target_distance -
-                  interpolate_trajectory_point(main_result.X, main_result.Y, target_distance)) * 100
-    
-    metrics_cols = st.columns(5)
-    
-    with metrics_cols[0]:
-        st.metric("Angolo Ottimale", f"{optimal_angle:.2f}°",
-                 delta=f"{optimal_angle - direct_angle:+.2f}°")
-    
-    with metrics_cols[1]:
-        st.metric("Velocità Iniziale", f"{main_result.v0:.1f} m/s")
-    
-    with metrics_cols[2]:
-        st.metric("Tempo di Volo", f"{main_result.flight_time:.2f} s")
-    
-    with metrics_cols[3]:
-        st.metric("Drop al Bersaglio", f"{target_drop:.1f} cm")
-    
-    with metrics_cols[4]:
-        st.metric("Energia Residua", 
-                 f"{kinetic_energy_residual:.1f} J",
-                 delta=f"{energy_retention_pct:.1f}%")
 
 if __name__ == '__main__':
     main()
