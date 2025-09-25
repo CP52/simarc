@@ -205,7 +205,10 @@ def reynolds_number_enhanced(v: float, diameter_mm: float, params: SimulationPar
     return rho * v * d_m / mu
 
 def enhanced_drag_coefficient(v: float, diameter_mm: float, angle_of_attack_deg: float,
-    fletching_type: str = 'Grande 3x5', params: SimulationParams) -> float:
+                               tip_type: str,
+                               fletching_type: str,
+                               params: SimulationParams) -> float:
+
     """Modello Cd avanzato basato su CFD e dati sperimentali (Litz, 2017)"""
     Re = reynolds_number_enhanced(v, diameter_mm, params)
     
@@ -333,8 +336,8 @@ class AdvancedRK4Integrator:
                 flight_angle = np.degrees(np.arctan2(vy, vx))
                 angle_of_attack = flight_angle - angle_deg
                 
-                Cd = enhanced_drag_coefficient(v_total, params.diameter, 
-                                             angle_of_attack, params.tip_type, params)
+                Cd = enhanced_drag_coefficient(v_total, params.diameter, angle_of_attack, params.tip_type, params.fletching_type, params)
+
                 
                 A = np.pi * (params.diameter / 1000.0 / 2.0) ** 2
                 rho = calculate_air_density(params.air_temperature, 
