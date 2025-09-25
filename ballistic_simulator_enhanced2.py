@@ -241,7 +241,7 @@ def enhanced_drag_coefficient(v: float, diameter_mm: float, angle_of_attack_deg:
                                                         params.humidity) / 
                                    PhysicalConstants.AIR_DENSITY_STP - 1)
     
-        fletching_factor = TIPO_IMPENNATURA_CD_FACTOR.get(params.fletching_type, 1.0)
+    fletching_factor = TIPO_IMPENNATURA_CD_FACTOR.get(params.fletching_type, 1.0)
     return Cd_base * angle_factor * tip_factor * fletching_factor * density_factor
 
 def calculate_velocity_enhanced(params: SimulationParams) -> float:
