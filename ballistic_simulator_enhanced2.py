@@ -204,6 +204,25 @@ def reynolds_number_enhanced(v: float, diameter_mm: float, params: SimulationPar
     
     return rho * v * d_m / mu
 
+
+def calculate_spine_stability_factor(spine: int, arrow_length: float) -> float:
+    """
+    Modello semplificato: spine troppo morbido o troppo rigido
+    riduce la stabilità. Valore ~1.0 = spine corretto.
+    """
+    # Valore "ideale" di riferimento (es. spine 700 per 28" ≈ 0.71 m)
+    ideal_spine = 700 * (arrow_length / 0.71)
+    ratio = spine / ideal_spine
+
+    # Se il rapporto è troppo basso o troppo alto → penalità
+    if ratio < 0.7:
+        return 0.85  # troppo morbido
+    elif ratio > 1.3:
+        return 0.90  # troppo rigido
+    else:
+        return 1.0   # compatibilità buona
+
+
 def enhanced_drag_coefficient(v: float, diameter_mm: float, angle_of_attack_deg: float,
                                tip_type: str,
                                fletching_type: str,
@@ -242,7 +261,8 @@ def enhanced_drag_coefficient(v: float, diameter_mm: float, angle_of_attack_deg:
                                    PhysicalConstants.AIR_DENSITY_STP - 1)
     
     fletching_factor = TIPO_IMPENNATURA_CD_FACTOR.get(params.fletching_type, 1.0) 
-    return Cd_base * angle_factor * tip_factor * fletching_factor * density_factor
+    spine_factor = calculate_spine_stability_factor(params.spine, params.length)
+    return Cd_base * angle_factor * tip_factor * fletching_factor * density_factor * spine_factor
 
 def calculate_velocity_enhanced(params: SimulationParams) -> float:
     """Calcolo velocità con modello energetico avanzato"""
