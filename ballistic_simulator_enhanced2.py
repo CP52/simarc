@@ -92,7 +92,7 @@ class SimulationParams:
     diameter: float               # [mm]
     balance_point: float          # [m] dal nock
     tip_type: str
-    fletching_type: str = 'Grande 3x5"'
+    fletching_type: str = 'Grande 3x5'''
     
     # Parametri arco
     draw_force: float             # [lb]
@@ -206,7 +206,7 @@ def reynolds_number_enhanced(v: float, diameter_mm: float, params: SimulationPar
 
 def enhanced_drag_coefficient(v: float, diameter_mm: float, angle_of_attack_deg: float, 
                             tip_type: str
-    fletching_type: str = 'Grande 3x5"', params: SimulationParams) -> float:
+    fletching_type: str = 'Grande 3x5''', params: SimulationParams) -> float:
     """Modello Cd avanzato basato su CFD e dati sperimentali (Litz, 2017)"""
     Re = reynolds_number_enhanced(v, diameter_mm, params)
     
@@ -1295,7 +1295,7 @@ def main():
         spine = st.number_input("Spine", 200, 1500, 700, step=25)
         balance_point = st.number_input("Bilanciamento (m dal nock)", 0.20, 0.60, 0.42, step=0.01)
         tip_type = st.selectbox("Tipo punta", list(TIPO_PUNTA_CD_FACTOR.keys()))
-        fletching_type = st.selectbox("Tipo impennatura", list(TIPO_IMPENNATURA_CD_FACTOR.keys()), index=list(TIPO_IMPENNATURA_CD_FACTOR.keys()).index('Grande 3x5"'))))
+        fletching_type = st.selectbox("Tipo impennatura", list(TIPO_IMPENNATURA_CD_FACTOR.keys()), index=list(TIPO_IMPENNATURA_CD_FACTOR.keys()).index('Grande 3x5'''))))
         
         st.markdown("### 🏹 Parametri Arco")
         draw_force = st.number_input("Forza (lb)", 20.0, 100.0, 42.0, step=1.0)
