@@ -66,9 +66,9 @@ TIPO_PUNTA_CD_FACTOR = {
 # Coefficienti aerodinamici per impennatura (basati su dati sperimentali Kooi 1997, Litz 2017)
 TIPO_IMPENNATURA_CD_FACTOR = {
     "Nessuna": 1.0,          # Asta liscia (teorico)
-    "Low-profile 2-3"": 1.2, # Alette corte e basse
-    "Standard 3"": 1.3,      # 3x3 pollici
-    "Grande 3x5"": 1.6,      # 3x5 pollici (default)
+    "Low-profile 2-3''": 1.2, # Alette corte e basse
+    "Standard 3''": 1.3,      # 3x3 pollici
+    "Grande 3x5''": 1.6,      # 3x5 pollici (default)
     "Flu-flu": 3.0            # Grande impennatura, elevato drag
 }
 
